@@ -4,6 +4,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Kabaaya ERP - Premium Wedding Wear",
   description: "Advanced Management System for Wedding Clothing Shops",
+  manifest: "/manifest.json",
+  themeColor: "#D4AF37",
 };
 
 export default function RootLayout({
