@@ -27,14 +27,15 @@ import {
   Calendar,
   Ruler,
   PlusCircle,
-  FileText
+  FileText,
+  Download
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { AppleLoader } from "@/components/AppleLoader";
 import { cn, formatCurrency } from "@/lib/utils";
-import { TailoringReceiptTemplate } from "@/components/TailoringReceiptTemplate";
-import { generatePDFReceipt } from "@/lib/generatePDF";
+// import { TailoringReceiptTemplate } from "@/components/TailoringReceiptTemplate";
+import { generatePDFReceipt, generateTailoringPDF } from "@/lib/generatePDF";
 import { format, isBefore, startOfToday } from "date-fns";
 
 interface Customer {
@@ -77,7 +78,7 @@ interface TailoringOrder {
   total_amount: number;
   advance_paid: number;
   balance_due: number;
-  status: 'Pending' | 'Measuring' | 'Sewing' | 'Ready' | 'Completed' | 'Delivered';
+  status: 'Pending' | 'Completed';
   due_date: string;
   notes?: string;
   discount_amount: number;
@@ -114,7 +115,7 @@ function TailoringContent() {
   const [selectedOrder, setSelectedOrder] = useState<TailoringOrder | null>(null);
   const [deletingOrder, setDeletingOrder] = useState<TailoringOrder | null>(null);
   const [nextInvoiceId, setNextInvoiceId] = useState("KT-2000");
-  const receiptRef = useRef<HTMLDivElement>(null);
+  // const receiptRef = useRef<HTMLDivElement>(null);
   const [printData, setPrintData] = useState<any>(null);
   const [fabricInventory, setFabricInventory] = useState<InventoryItem[]>([]);
 
@@ -149,22 +150,47 @@ function TailoringContent() {
   const fetchNextId = async () => {
     const { data } = await supabase
       .from('tailoring_orders')
-      .select('invoice_id')
+      .select('cr_book_page_number')
+      .not('cr_book_page_number', 'is', null)
       .order('created_at', { ascending: false })
       .limit(1);
 
-    if (data && data.length > 0) {
-      const lastId = data[0].invoice_id;
-      const num = parseInt(lastId.split('-')[1]);
-      setNextInvoiceId(`KT-${num + 1}`);
-    } else {
-      setNextInvoiceId("KT-2000");
+    if (data && data.length > 0 && data[0].cr_book_page_number) {
+      const lastVal = data[0].cr_book_page_number;
+      // Try to parse if it's KT-XXXX format
+      const match = lastVal.match(/KT-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1]);
+        return `KT-${num + 1}`;
+      }
     }
+    // Default: find highest KT number from all records
+    const { data: allData } = await supabase
+      .from('tailoring_orders')
+      .select('cr_book_page_number')
+      .not('cr_book_page_number', 'is', null);
+
+    if (allData && allData.length > 0) {
+      const nums = allData
+        .map((r: any) => { const m = (r.cr_book_page_number || '').match(/KT-(\d+)/); return m ? parseInt(m[1]) : 0; })
+        .filter((n: number) => n > 0);
+      if (nums.length > 0) {
+        const max = Math.max(...nums);
+        return `KT-${max + 1}`;
+      }
+    }
+    return 'KT-1900';
+  };
+
+  const loadNextId = async () => {
+    const next = await fetchNextId();
+    setNextInvoiceId(next);
+    return next;
   };
 
   useEffect(() => {
     fetchData();
-    fetchNextId();
+    loadNextId();
     fetchFabricInventory();
   }, []);
 
@@ -250,12 +276,13 @@ function TailoringContent() {
       setIsFormOpen(false);
       resetForm();
       fetchData();
-      fetchNextId();
+      const next = await fetchNextId();
+      setNextInvoiceId(next);
     }
     setSaving(false);
   };
 
-  const handleStatusUpdate = async (orderId: string, newStatus: TailoringOrder['status']) => {
+  const handleStatusUpdate = async (orderId: string, newStatus: 'Pending' | 'Completed') => {
     setSaving(true);
     const { error } = await supabase
       .from('tailoring_orders')
@@ -270,10 +297,25 @@ function TailoringContent() {
     setSaving(false);
   };
 
+  const handleDeleteOrder = async () => {
+    if (!deletingOrder) return;
+    setSaving(true);
+    
+    await supabase.from('tailoring_items').delete().eq('tailoring_order_id', deletingOrder.id);
+    const { error } = await supabase.from('tailoring_orders').delete().eq('id', deletingOrder.id);
+    
+    if (error) alert("Failed to delete order: " + error.message);
+    else {
+      setDeletingOrder(null);
+      fetchData();
+    }
+    setSaving(false);
+  };
+
   const resetForm = () => {
     setFormData({
       invoice_id: "",
-      cr_book_page_number: "",
+      cr_book_page_number: nextInvoiceId,
       customer_name: "",
       customer_address: "",
       customer_phone: "",
@@ -370,14 +412,9 @@ function TailoringContent() {
   };
 
   const handlePrint = async (order: TailoringOrder) => {
-    setPrintData(order);
-    // Give state a moment to update and template to render
-    setTimeout(async () => {
-      const success = await generatePDFReceipt("tailoring-receipt", `JobCard_${order.invoice_id}.pdf`);
-      if (success) {
-        // Success toast if needed
-      }
-    }, 500);
+    setLoading(true);
+    const success = await generateTailoringPDF(order, `JobCard_${order.invoice_id}.pdf`);
+    setLoading(false);
   };
 
   const filteredOrders = useMemo(() => {
@@ -386,20 +423,14 @@ function TailoringContent() {
         o.customer_phone.includes(searchQuery) ||
         o.invoice_id.toLowerCase().includes(searchQuery.toLowerCase());
 
-      if (initialStatus === "Delivered") return matchesSearch && o.status === "Delivered";
-      return matchesSearch && o.status !== "Delivered";
+      if (initialStatus === "Completed") return matchesSearch && o.status === "Completed";
+      return matchesSearch && o.status !== "Completed";
     });
   }, [orders, searchQuery, initialStatus]);
 
   const todayStr = startOfToday().toISOString().split('T')[0];
   return (
     <div className="p-4 space-y-6 max-w-lg mx-auto pb-40">
-      {/* Hidden Receipt Template */}
-      <div className="absolute left-[-9999px] top-0 overflow-hidden h-0 w-0">
-        {printData && (
-          <TailoringReceiptTemplate ref={receiptRef} data={printData} />
-        )}
-      </div>
       {/* Global loader during actions */}
       <AnimatePresence>
         {(loading || saving) && (
@@ -461,77 +492,168 @@ function TailoringContent() {
           </div>
         ) : (
           filteredOrders.map((order) => {
-            const isOverdue = !['Ready', 'Completed', 'Delivered'].includes(order.status) &&
-              order.due_date &&
-              isBefore(new Date(order.due_date), startOfToday());
+            const isPending = order.status === 'Pending';
+            const isOverdue = isPending && order.due_date && isBefore(new Date(order.due_date), startOfToday());
 
             return (
               <motion.div
                 layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
                 key={order.id}
-                onClick={() => setSelectedOrder(order)}
                 className={cn(
-                  "border rounded-3xl p-5 hover:bg-white/5 transition-all relative overflow-hidden cursor-pointer",
-                  isOverdue ? "bg-red-500/5 border-red-500/50" : "bg-[#1C1C1E] border-white/5"
+                  "group relative bg-[#1C1C1E] border border-white/5 rounded-[2.5rem] overflow-hidden transition-all duration-300 hover:border-[#D4AF37]/30 shadow-xl",
+                  isOverdue ? "ring-1 ring-red-500/20" : ""
                 )}
               >
-                {/* Overdue highlight element */}
-                {isOverdue && (
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 blur-3xl -z-10 rounded-full translate-x-10 -translate-y-10" />
-                )}
-
-                <div className="flex justify-between items-start mb-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] bg-[#D4AF37]/10 text-[#D4AF37] px-2 py-0.5 rounded-lg border border-[#D4AF37]/20 font-black tracking-widest uppercase">
-                        {order.invoice_id}
-                      </span>
-                      {order.cr_book_page_number && (
-                        <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded-lg border border-white/5 font-bold uppercase">
-                          PG: {order.cr_book_page_number}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="text-lg font-black tracking-tight">{order.customer_name}</h3>
-                    <div className="flex items-center gap-2 text-gray-400 text-xs font-bold">
-                      <Scissors size={12} className="text-[#D4AF37]" />
-                      <span>{order.items?.length || 0} Items</span>
-                    </div>
+                {/* Top Row: Bill No & Status */}
+                <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 bg-white/[0.02]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-[#D4AF37] animate-pulse" />
+                    <span className="text-xs font-black tracking-[0.2em] text-[#D4AF37] uppercase">
+                      {order.invoice_id}
+                    </span>
                   </div>
-                  <div className={cn(
-                    "px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border",
-                    order.status === "Ready" ? "bg-green-500/10 text-green-500 border-green-500/20" :
-                      order.status === "Completed" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
-                        order.status === "Delivered" ? "bg-white/10 text-white border-white/20" :
-                          order.status === "Sewing" ? "bg-orange-500/10 text-orange-500 border-orange-500/20" :
-                            "bg-white/5 text-gray-500 border-white/10"
-                  )}>
-                    {order.status}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStatusUpdate(order.id, isPending ? 'Completed' : 'Pending');
+                    }}
+                    className={cn(
+                      "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all active:scale-90 border",
+                      isPending 
+                        ? "bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-lg shadow-amber-500/10" 
+                        : "bg-[#1e293b] text-blue-300 border-white/10 shadow-lg"
+                    )}
+                  >
+                    {order.status === 'Completed' ? 'Complete' : order.status}
+                  </button>
+                </div>
+
+                {/* Middle Content */}
+                <div className="p-7 space-y-5" onClick={() => setSelectedOrder(order)}>
+                  <div className="space-y-1">
+                    <h3 className="text-2xl font-black tracking-tight text-white group-hover:text-[#D4AF37] transition-colors line-clamp-1">
+                      {order.customer_name}
+                    </h3>
+                    <p className="text-sm font-bold text-gray-500 flex items-center gap-2">
+                       <Phone size={14} className="text-[#D4AF37]/50" />
+                       {order.customer_phone}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 pt-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex items-center gap-1.5">
+                        <Calendar size={10} className="text-[#D4AF37]" />
+                        Collection Date
+                      </span>
+                      <span className={cn(
+                        "text-sm font-black",
+                        isOverdue ? "text-red-400" : "text-white"
+                      )}>
+                        {order.due_date ? format(new Date(order.due_date), "MMM dd, yyyy") : "TBD"}
+                      </span>
+                    </div>
+                    
+                    <div className="text-right flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Balance</span>
+                      <span className="text-lg font-black text-[#D4AF37]">
+                        {formatCurrency(order.balance_due)}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/5">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1">
-                      <Clock size={10} />
-                      Due Date
-                    </p>
-                    <p className={cn("text-xs font-bold", isOverdue ? "text-red-400" : "text-white")}>
-                      {order.due_date ? format(new Date(order.due_date), "MMM dd, yyyy") : "No Date"}
-                    </p>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Balance</p>
-                    <p className="text-lg font-black text-white">{formatCurrency(order.balance_due)}</p>
-                  </div>
+                {/* Bottom Action Bar */}
+                <div className="grid grid-cols-2 gap-px bg-white/5 border-t border-white/5 relative z-10">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrint(order);
+                    }}
+                    className="flex items-center justify-center gap-2 py-5 bg-transparent hover:bg-white/5 transition-colors group/btn active:scale-95 duration-200"
+                  >
+                    <Download size={18} className="text-[#D4AF37] group-hover/btn:translate-y-0.5 transition-transform" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#D4AF37]">Download PDF</span>
+                  </button>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Logic for edit order would go here, using setSelectedOrder for now
+                      setSelectedOrder(order);
+                      setIsFormOpen(true);
+                      setFormData({
+                        invoice_id: order.invoice_id,
+                        cr_book_page_number: order.cr_book_page_number,
+                        customer_name: order.customer_name,
+                        customer_address: order.customer_address,
+                        customer_phone: order.customer_phone,
+                        due_date: order.due_date,
+                        notes: order.notes || "",
+                        advance_paid: order.advance_paid,
+                        discount_amount: order.discount_amount,
+                        discount_type: order.discount_type,
+                        items: order.items || []
+                      });
+                    }}
+                    className="flex items-center justify-center gap-2 py-5 bg-transparent hover:bg-white/5 transition-colors group/btn border-l border-white/5 active:scale-95 duration-200"
+                  >
+                    <Pencil size={18} className="text-white group-hover/btn:rotate-12 transition-transform" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white">Edit Order</span>
+                  </button>
+                </div>
+
+                {/* Primary Action Bar (Complete / Delete) */}
+                <div className="grid grid-cols-2 gap-px bg-white/5 border-t border-white/5 relative z-10">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStatusUpdate(order.id, 'Completed');
+                    }}
+                    className="flex items-center justify-center gap-2 py-5 bg-[#1e293b] hover:bg-[#1e293b]/80 transition-colors group/btn active:scale-95 duration-200"
+                  >
+                    <CheckCircle2 size={18} className="text-blue-300 group-hover/btn:scale-110 transition-transform" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-300">Complete</span>
+                  </button>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeletingOrder(order);
+                    }}
+                    className="flex items-center justify-center gap-2 py-5 bg-red-500/5 hover:bg-red-500/10 transition-colors group/btn border-l border-white/5 active:scale-95 duration-200"
+                  >
+                    <Trash2 size={18} className="text-red-500 group-hover/btn:scale-110 transition-transform" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-red-500">Delete</span>
+                  </button>
                 </div>
               </motion.div>
             );
           })
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deletingOrder && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDeletingOrder(null)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-[#1C1C1E] w-full max-w-sm rounded-[3rem] p-8 relative border border-white/10 shadow-2xl text-center">
+              <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-6">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-2xl font-black text-white mb-2">Delete Order?</h3>
+              <p className="text-gray-400 text-sm font-bold mb-8">This action cannot be undone. Are you sure you want to permanently delete <span className="text-white">{deletingOrder.invoice_id}</span> ({deletingOrder.customer_name})?</p>
+              <div className="flex gap-4">
+                <button onClick={() => setDeletingOrder(null)} className="flex-1 py-4 bg-white/5 rounded-2xl text-white font-black uppercase tracking-widest text-xs active:scale-95 transition-all outline-none">Cancel</button>
+                <button onClick={handleDeleteOrder} disabled={saving} className="flex-1 py-4 bg-red-500 rounded-2xl text-white font-black uppercase tracking-widest text-xs active:scale-95 transition-all disabled:opacity-50 flex justify-center items-center gap-2 outline-none">
+                  {saving ? <AppleLoader /> : "Delete"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Modals will be added here */}
       <TailoringModals
@@ -694,14 +816,14 @@ function TailoringModals({
     <AnimatePresence>
       {/* New Order Form (Placeholder for now, will implement full multi-item form) */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div key="form-modal" className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsFormOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-xl" />
           <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-[#1C1C1E] w-full max-w-lg rounded-[3rem] p-8 relative border border-white/10 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
             <div className="flex justify-between items-center mb-8">
               <div>
-                <h2 className="text-2xl font-black tracking-tight">{formData.invoice_id || "NEW ORDER"}</h2>
+                <h2 className="text-2xl font-black tracking-tight">{formData.cr_book_page_number || nextInvoiceId}</h2>
                 <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.2em] mt-1">
-                  {formData.invoice_id ? "Edit Order" : "Auto-generated KT-Number will apply"}
+                  Bill No · Auto-assigned · Editable
                 </p>
               </div>
               <button onClick={() => setIsFormOpen(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-500 hover:text-white transition-colors"><X size={20} /></button>
@@ -719,8 +841,14 @@ function TailoringModals({
                     <input type="tel" placeholder="Mobile..." value={formData.customer_phone} onChange={e => setFormData({ ...formData, customer_phone: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/50 transition-all font-bold" />
                   </div>
                   <div className="space-y-2 px-1">
-                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">PG Number</label>
-                    <input type="text" placeholder="Page..." value={formData.cr_book_page_number} onChange={e => setFormData({ ...formData, cr_book_page_number: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/50 transition-all font-bold" />
+                    <label className="text-[10px] font-black text-[#D4AF37]/70 uppercase tracking-widest ml-1">Bill No. ✏️</label>
+                    <input
+                      type="text"
+                      placeholder={nextInvoiceId}
+                      value={formData.cr_book_page_number || nextInvoiceId}
+                      onChange={e => setFormData({ ...formData, cr_book_page_number: e.target.value })}
+                      className="w-full bg-[#D4AF37]/5 border border-[#D4AF37]/30 rounded-2xl p-4 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/50 transition-all font-black text-[#D4AF37]"
+                    />
                   </div>
                 </div>
                 <div className="space-y-2 px-1">
@@ -953,7 +1081,7 @@ function TailoringModals({
                 })} 
                 className="w-full bg-[#D4AF37] disabled:bg-gray-800 disabled:text-gray-500 disabled:shadow-none text-black font-black py-4 rounded-2xl active:scale-95 transition-transform shadow-lg shadow-[#D4AF37]/20 flex items-center justify-center gap-2"
               >
-                {saving ? <AppleLoader size="sm" /> : (<><BadgeCheck size={20} /> INITIALIZE REGISTRY</>)}
+                {saving ? <AppleLoader /> : (<><BadgeCheck size={20} /> INITIALIZE REGISTRY</>)}
               </button>
             </form>
           </motion.div>
@@ -962,67 +1090,86 @@ function TailoringModals({
 
       {/* Order Details Modal (Placeholder) */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedOrder(null)} className="absolute inset-0 bg-black/80 backdrop-blur-xl" />
-          <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-[#1C1C1E] w-full max-w-lg rounded-[3.5rem] p-10 relative border border-white/10 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
-            <div className="flex justify-between items-start mb-12">
-              <div>
-                <span className="text-[10px] bg-[#D4AF37]/10 text-[#D4AF37] px-2 py-0.5 rounded-lg border border-[#D4AF37]/20 font-black tracking-widest uppercase mb-2 inline-block">
-                  {selectedOrder.invoice_id}
-                </span>
-                <h2 className="text-3xl font-black tracking-tighter text-white">{selectedOrder.customer_name}</h2>
-                <p className="text-gray-500 text-[10px] font-black tracking-[0.3em] uppercase mt-2">Bespoke Registry</p>
-              </div>
-              <button onClick={() => setSelectedOrder(null)} className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-gray-500 hover:text-white transition-colors border border-white/5"><X size={24} /></button>
-            </div>
+        <div key="details-modal" className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center">
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            onClick={() => setSelectedOrder(null)} 
+            className="absolute inset-0 bg-black/90 backdrop-blur-md" 
+          />
+          <motion.div 
+            initial={{ y: "100%" }} 
+            animate={{ y: 0 }} 
+            exit={{ y: "100%" }} 
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="bg-[#1C1C1E] w-full max-w-lg rounded-t-[2.5rem] sm:rounded-[3rem] p-6 sm:p-10 relative border-t border-x border-white/10 sm:border shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar"
+          >
+            {/* Mobile Handle */}
+            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-8 sm:hidden" />
 
-            <div className="space-y-10">
-              {/* Workflow Management */}
-              <div className="bg-white/[0.03] rounded-[2.5rem] p-8 border border-white/5 shadow-inner">
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-6">Execution Phase</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {['Sewing', 'Ready', 'Delivered'].map((s) => (
-                    <button
-                      key={s}
-                      disabled={saving}
-                      onClick={() => handleStatusUpdate(selectedOrder.id, s as any)}
-                      className={cn(
-                        "py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                        selectedOrder.status === s ? "bg-white text-black shadow-lg scale-105" : "bg-black/40 text-gray-500 border border-white/5 hover:bg-white/5"
-                      )}
-                    >
-                      {s}
-                    </button>
-                  ))}
+            <div className="flex justify-between items-start mb-8 sm:mb-12">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] bg-[#D4AF37]/10 text-[#D4AF37] px-2.5 py-1 rounded-lg border border-[#D4AF37]/20 font-black tracking-widest uppercase">
+                    {selectedOrder.invoice_id}
+                  </span>
+                  <span className={cn(
+                    "text-[10px] px-2.5 py-1 rounded-lg font-black tracking-widest uppercase border",
+                    selectedOrder.status === 'Completed' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                  )}>
+                    {selectedOrder.status === 'Completed' ? 'Complete' : 'Pending'}
+                  </span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tighter text-white">{selectedOrder.customer_name}</h2>
+                <div className="flex items-center gap-2 mt-2">
+                   <Phone size={12} className="text-gray-500" />
+                   <p className="text-gray-500 text-xs font-bold">{selectedOrder.customer_phone}</p>
                 </div>
               </div>
+              <button onClick={() => setSelectedOrder(null)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/5 flex items-center justify-center text-gray-500 hover:text-white transition-colors border border-white/5"><X size={20} /></button>
+            </div>
 
-              {/* Job Card Items Display */}
+            <div className="space-y-8 sm:space-y-10">
+              {/* Execution Status Toggle - Minimalist */}
+              <div className="grid grid-cols-2 gap-2 bg-black/40 p-1.5 rounded-2xl border border-white/5">
+                {['Pending', 'Completed'].map((s) => (
+                  <button
+                    key={s}
+                    disabled={saving}
+                    onClick={() => handleStatusUpdate(selectedOrder.id, s as any)}
+                    className={cn(
+                      "py-3.5 rounded-[1.2rem] text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+                      selectedOrder.status === s 
+                        ? (s === 'Completed' ? "bg-[#1e293b] text-blue-300 shadow-xl shadow-blue-500/10 border border-white/10" : "bg-amber-500/10 text-amber-500 border border-amber-500/20") 
+                        : "text-gray-500 hover:text-white"
+                    )}
+                  >
+                    {s === 'Completed' ? 'Mark Complete' : 'Keep Pending'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Job Card Items Display - Clean List */}
               <div className="space-y-4">
-                <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-[0.3em] px-2">Job Card Summary</p>
-                <div className="space-y-4">
+                <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-[0.4em] px-1 opacity-50">Job Details</p>
+                <div className="divide-y divide-white/5 overflow-hidden rounded-3xl border border-white/5 bg-white/[0.01]">
                   {selectedOrder.items?.map((item: any, idx: number) => (
-                    <div key={idx} className="bg-white/5 rounded-3xl p-6 border border-white/5 space-y-4 shadow-sm">
+                    <div key={idx} className="p-5 sm:p-6 space-y-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-[#D4AF37] border border-white/5">
-                          <Scissors size={20} />
+                        <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/10 flex items-center justify-center text-[#D4AF37]">
+                          <Scissors size={18} />
                         </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-gray-400 font-bold">{item.item_code}</span>
-                            <p className="text-sm font-black text-white">{item.item_description}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-black text-white truncate">{item.item_description}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[9px] text-[#D4AF37] font-black uppercase tracking-widest">{item.item_code}</span>
+                            <span className="w-1 h-1 rounded-full bg-white/10" />
+                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{item.fabric_source}</span>
                           </div>
-                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">{item.fabric_source}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
-                        <div>
-                          <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-1">Stitching</p>
-                          <p className="text-xs font-bold text-white">{formatCurrency(item.stitching_price)}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-1">Subtotal</p>
-                          <p className="text-sm font-black text-white">{formatCurrency(item.item_total)}</p>
+                          <p className="text-xs font-black text-white">{formatCurrency(item.item_total)}</p>
                         </div>
                       </div>
                     </div>
@@ -1030,48 +1177,57 @@ function TailoringModals({
                 </div>
               </div>
 
-              {/* Financial Reconciliation */}
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/5 border border-white/5 p-6 rounded-[2rem] shadow-inner text-center">
-                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.3em] mb-2">Subtotal</p>
-                    <p className="text-xl font-black text-white">{formatCurrency(selectedOrder.total_amount)}</p>
+              {/* Financial Summary - Receipt Style */}
+              <div className="space-y-6">
+                <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-[0.4em] px-1 opacity-50">Statement</p>
+                <div className="bg-white/[0.03] rounded-[2rem] p-6 sm:p-8 space-y-4 border border-white/5">
+                  <div className="space-y-3 pb-4 border-b border-white/5">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-gray-500 uppercase tracking-widest">Initial Subtotal</span>
+                      <span className="text-white">{formatCurrency(selectedOrder.total_amount)}</span>
+                    </div>
+                    {selectedOrder.discount_amount > 0 && (
+                      <div className="flex justify-between items-center text-xs font-bold">
+                        <span className="text-orange-500 uppercase tracking-widest">
+                          Discount ({selectedOrder.discount_type === 'percentage' ? selectedOrder.discount_amount + '%' : 'Fixed'})
+                        </span>
+                        <span className="text-orange-500">
+                          -{selectedOrder.discount_type === 'percentage' 
+                            ? formatCurrency(selectedOrder.total_amount * (selectedOrder.discount_amount / 100))
+                            : formatCurrency(selectedOrder.discount_amount)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Grand Total</span>
+                      <span className="text-xl font-black text-white">{formatCurrency(selectedOrder.grand_total)}</span>
+                    </div>
                   </div>
-                  <div className="bg-orange-500/[0.05] border border-orange-500/10 p-6 rounded-[2rem] shadow-inner text-center">
-                    <p className="text-[9px] font-black text-orange-500 uppercase tracking-[0.3em] mb-2">Discount ({selectedOrder.discount_type === 'percentage' ? selectedOrder.discount_amount + '%' : 'Fixed'})</p>
-                    <p className="text-xl font-black text-orange-500">
-                      {selectedOrder.discount_type === 'percentage' 
-                        ? formatCurrency(selectedOrder.total_amount * (selectedOrder.discount_amount / 100))
-                        : formatCurrency(selectedOrder.discount_amount)}
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-white/5 border border-white/5 p-6 rounded-[2rem] shadow-inner flex justify-between items-center">
-                  <p className="text-sm font-black uppercase tracking-widest text-gray-400">Grand Total</p>
-                  <p className="text-2xl font-black text-[#D4AF37]">{formatCurrency(selectedOrder.grand_total)}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-green-500/[0.05] border border-green-500/10 p-6 rounded-[2rem] shadow-inner text-center">
-                    <p className="text-[9px] font-black text-green-500 uppercase tracking-[0.3em] mb-2">Paid (Advance)</p>
-                    <p className="text-xl font-black text-green-500">{formatCurrency(selectedOrder.advance_paid)}</p>
-                  </div>
-                  <div className="bg-red-500/[0.05] border border-red-500/10 p-6 rounded-[2rem] shadow-inner text-center">
-                    <p className="text-[9px] font-black text-red-500 uppercase tracking-[0.3em] mb-2">Balance Due</p>
-                    <p className="text-xl font-black text-red-500">{formatCurrency(selectedOrder.balance_due)}</p>
+
+                  <div className="space-y-3 pt-2">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-green-500/80 uppercase tracking-widest">Paid (Advance)</span>
+                      <span className="text-green-500">{formatCurrency(selectedOrder.advance_paid)}</span>
+                    </div>
+                    <div className="flex justify-between items-center bg-[#D4AF37]/10 p-4 rounded-2xl border border-[#D4AF37]/10">
+                      <span className="text-xs font-black text-[#D4AF37] uppercase tracking-widest">Balance Due</span>
+                      <span className="text-2xl font-black text-[#D4AF37]">{formatCurrency(selectedOrder.balance_due)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex gap-4">
+              {/* Action Buttons */}
+              <div className="flex gap-4 pt-2">
                 <button
                   onClick={() => handlePrint(selectedOrder)}
-                  className="flex-1 bg-white text-black font-black py-4 rounded-2xl active:scale-95 transition-transform flex items-center justify-center gap-2 group shadow-xl"
+                  className="flex-1 bg-white text-black font-black py-5 rounded-2xl active:scale-95 transition-transform flex items-center justify-center gap-3 group shadow-2xl"
                 >
-                  <Printer size={18} className="transition-transform group-hover:scale-110" />
+                  <Printer size={20} className="transition-transform group-hover:scale-110" />
                   <span className="text-[10px] uppercase tracking-[0.2em]">Print Receipt</span>
                 </button>
-                <a href={`tel:${selectedOrder.customer_phone}`} className="w-16 h-16 bg-[#34C759] text-white rounded-full flex items-center justify-center shadow-lg shadow-green-500/20 active:scale-90 transition-transform">
-                  <PhoneCall size={24} fill="currentColor" />
+                <a href={`tel:${selectedOrder.customer_phone}`} className="w-16 h-16 sm:w-20 sm:h-20 bg-[#34C759] text-white rounded-full flex items-center justify-center shadow-lg shadow-green-500/20 active:scale-90 transition-transform flex-shrink-0">
+                  <PhoneCall size={28} fill="currentColor" />
                 </a>
               </div>
             </div>

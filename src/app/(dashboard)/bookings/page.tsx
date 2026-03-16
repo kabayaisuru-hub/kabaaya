@@ -34,7 +34,7 @@ import { supabase } from "@/lib/supabase";
 import { AppleLoader } from "@/components/AppleLoader";
 import { cn, formatCurrency } from "@/lib/utils";
 import { generatePDFReceipt } from "@/lib/generatePDF";
-import { ReceiptTemplate } from "@/components/ReceiptTemplate";
+// import { ReceiptTemplate } from "@/components/ReceiptTemplate";
 
 interface InventoryItem {
   id: string;
@@ -263,8 +263,8 @@ function BookingsContent() {
     let signatureDataPayload: string | undefined = undefined;
     
     if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-       // Force a white background with JPEG
-       signatureDataPayload = sigCanvas.current.getSignaturePad().toDataURL("image/jpeg");
+       // Use PNG to preserve transparent background (JPEG fills transparent with black)
+       signatureDataPayload = sigCanvas.current.getSignaturePad().toDataURL("image/png");
        
        try {
          const byteString = atob(signatureDataPayload.split(',')[1]);
@@ -276,12 +276,12 @@ function BookingsContent() {
          }
          const blob = new Blob([ab], { type: mimeString });
          
-         const fileName = `sig_${Date.now()}_${Math.random().toString(36).substring(7)}.jpeg`;
+         const fileName = `sig_${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
          
          const { data: uploadData, error: uploadError } = await supabase.storage
            .from('signatures')
            .upload(fileName, blob, {
-             contentType: 'image/jpeg',
+             contentType: 'image/png',
              cacheControl: '3600',
              upsert: false
            });
@@ -366,16 +366,11 @@ function BookingsContent() {
       // --- AUTOMATIC PDF DOWNLOAD TRIGGER ---
       setTimeout(async () => {
         setLoading(true);
-        // Force the hidden template to re-render to attach the signature
-        setLastBooking((prev: any) => ({ ...prev }));
-        
-        // Wait for DOM
-        await new Promise(r => setTimeout(r, 600));
-        
         const filename = `${newBookingObj.invoice_no}_${newBookingObj.customer_name.replace(/\s+/g, "_")}.pdf`;
-        await generatePDFReceipt("printable-receipt", filename, newBookingObj.signature_data);
+        await generatePDFReceipt(newBookingObj, filename);
         setLoading(false);
       }, 500);
+      // --------------------------------------
       // --------------------------------------
     }
     setSaving(false);
@@ -1237,11 +1232,9 @@ function BookingsContent() {
                             signature_data: viewingBooking.signature_url,
                             invoice_no: customInvoiceNo
                         };
-                        setLastBooking(data);
                         setLoading(true);
-                        await new Promise(r => setTimeout(r, 600));
                         const filename = `${customInvoiceNo}_${viewingBooking.customer_name.replace(/\s+/g, "_")}.pdf`;
-                        await generatePDFReceipt("printable-receipt", filename, viewingBooking.signature_url);
+                        await generatePDFReceipt(data, filename);
                         setLoading(false);
                     }}
                     className="w-full bg-[#D4AF37] text-black font-black py-4 rounded-2xl active:scale-95 transition-transform flex items-center justify-center gap-2"
@@ -1338,11 +1331,6 @@ function BookingsContent() {
         )}
       </AnimatePresence>
       
-       {lastBooking && (
-          <div style={{ display: 'none' }}>
-              <ReceiptTemplate data={lastBooking} />
-          </div>
-      )}
     </div>
   );
 }

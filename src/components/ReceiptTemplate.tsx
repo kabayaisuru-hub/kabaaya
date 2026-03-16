@@ -1,6 +1,5 @@
 import React, { forwardRef } from "react";
 import { format } from "date-fns";
-import { Shirt, User, Phone, CreditCard, CalendarDays } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 interface ReceiptItem {
@@ -30,9 +29,8 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
       <div 
         ref={ref}
         id="printable-receipt"
-        className="p-12 font-sans flex flex-col"
         style={{
-          width: '794px', // Exactly 210mm at 96 DPI
+          width: '794px',
           backgroundColor: '#ffffff',
           color: '#000000',
           position: 'absolute',
@@ -40,19 +38,22 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
           top: '0',
           boxSizing: 'border-box',
           fontSize: '16px',
-          minHeight: '1123px', // A4 height at 96 DPI
+          minHeight: '1123px',
+          padding: '48px',
+          fontFamily: 'Helvetica, Arial, sans-serif',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         {/* Header Section: Boutique Style */}
-        <div className="flex justify-between items-end mb-12 pb-8" style={{ borderBottom: '2px solid #D4AF37' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '48px', paddingBottom: '32px', borderBottom: '2px solid #D4AF37' }}>
           {/* Left Side: Prominent Branding */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <img 
                 src="/logo.jpg" 
                 alt="Logo" 
-                className="h-16" 
-                style={{ display: 'block' }}
+                style={{ height: '64px', display: 'block' }}
               />
               <div>
                 <h1 style={{ margin: 0, padding: 0, fontSize: '42px', fontWeight: '900', color: '#D4AF37', letterSpacing: '-0.02em', lineHeight: '1' }}>KABAAYA</h1>
@@ -67,7 +68,7 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
           </div>
 
           {/* Right Side: Invoice Header */}
-          <div className="text-right">
+          <div style={{ textAlign: 'right' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#000000', margin: 0 }}>INVOICE</h2>
             {data.invoice_no && (
               <p style={{ fontSize: '14px', fontWeight: '900', color: '#D4AF37', marginTop: '4px' }}>INVOICE: <span style={{ color: '#000000' }}>{data.invoice_no}</span></p>
@@ -77,8 +78,8 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
         </div>
 
         {/* Customer Information Grid */}
-        <div className="mb-12 p-8" style={{ backgroundColor: '#F9FAFB', borderRadius: '24px' }}>
-          <div className="grid grid-cols-3 gap-8">
+        <div style={{ marginBottom: '48px', padding: '32px', backgroundColor: '#F9FAFB', borderRadius: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '32px' }}>
             <div>
               <p style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9CA3AF', marginBottom: '4px' }}>Customer Name</p>
               <p style={{ fontSize: '16px', fontWeight: '800', color: '#000000' }}>{data.customer_name}</p>
@@ -95,7 +96,7 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
         </div>
 
         {/* Item Table: Supports Multiple Items */}
-        <div className="mb-8 flex-grow">
+        <div style={{ marginBottom: '32px', flexGrow: 1 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#1C1C1E' }}>

@@ -26,8 +26,8 @@ import { StatusCard } from "@/components/StatusCard";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { cn, formatCurrency } from "@/lib/utils";
-import { generatePDFReceipt } from "@/lib/generatePDF";
-import { TailoringReceiptTemplate } from "@/components/TailoringReceiptTemplate";
+import { generatePDFReceipt, generateTailoringPDF } from "@/lib/generatePDF";
+// import { TailoringReceiptTemplate } from "@/components/TailoringReceiptTemplate";
 import { FestiveAlert } from "@/components/FestiveAlert";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { format } from "date-fns";
@@ -38,7 +38,10 @@ import {
   Area,
   XAxis,
   YAxis,
-  Tooltip
+  Tooltip,
+  BarChart,
+  Bar,
+  Legend
 } from "recharts";
 
 export default function Dashboard() {
@@ -52,9 +55,11 @@ export default function Dashboard() {
     monthlyIncome: 0,
     dailyExpenses: 0,
     monthlyExpenses: 0,
-    netProfit: 0
+    netProfit: 0,
+    availableInventory: 0
   });
   const [chartData, setChartData] = React.useState<any[]>([]);
+  const [monthlyChartData, setMonthlyChartData] = React.useState<any[]>([]);
 
   const [readyOrders, setReadyOrders] = React.useState<any[]>([]);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -85,11 +90,11 @@ export default function Dashboard() {
       .in("status", ["Confirmed", "PickedUp"])
       .lt("return_date", today);
 
-    // 3. Ready for Collection (Tailoring status = 'Ready')
+    // 3. Ready for Collection (Tailoring status = 'Completed')
     const { count: tCount, data: tData } = await supabase
       .from("tailoring_orders")
       .select("*, items:tailoring_items(*)", { count: 'exact' })
-      .eq("status", "Ready")
+      .eq("status", "Completed")
       .order("created_at", { ascending: false });
 
     // 4. Available Inventory
@@ -106,54 +111,86 @@ export default function Dashboard() {
       .eq("expense_date", today);
     const dailyExpenses = dExpData?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
 
-    // 6. Monthly Expenses
+    // 6 Months ago date for Bar Chart
+    const sixMonthsAgoDate = new Date();
+    sixMonthsAgoDate.setMonth(sixMonthsAgoDate.getMonth() - 5);
+    sixMonthsAgoDate.setDate(1);
+    const sixMonthsAgo = sixMonthsAgoDate.toISOString().split('T')[0];
+
+    // 6. Monthly Expenses (last 6 months)
     const { data: mExpData } = await supabase
       .from("expenses")
-      .select("amount")
-      .gte("expense_date", firstDayOfMonth);
-    const monthlyExpenses = mExpData?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
+      .select("amount, expense_date")
+      .gte("expense_date", sixMonthsAgo);
+      
+    const monthlyExpenses = mExpData?.reduce((acc, curr) => {
+      if (curr.expense_date >= firstDayOfMonth) {
+        return acc + Number(curr.amount);
+      }
+      return acc;
+    }, 0) || 0;
 
     // 7. Income Calcs & Chart Data Generation
-    // We need daily breakdown for the chart, and total sums for the cards.
-
-    // Total Rental Income (Confirmed/PickedUp/Returned) for the month
+    // Total Rental Income (Confirmed/PickedUp/Returned) for last 6 months
     const { data: rentalData } = await supabase
       .from("bookings")
       .select("created_at, total_amount")
       .neq("status", "Cancelled")
-      .gte("created_at", firstDayOfMonth);
+      .gte("created_at", sixMonthsAgo);
 
-    // Total Tailoring Income for the month
+    // Total Tailoring Income for last 6 months
     const { data: tailoringData } = await supabase
       .from("tailoring_orders")
       .select("created_at, total_amount")
-      .gte("created_at", firstDayOfMonth);
+      .gte("created_at", sixMonthsAgo);
 
     let dailyIncome = 0;
     let monthlyIncome = 0;
     const dailyRevenues: Record<string, number> = {};
+    const monthlyAggregates: Record<string, { income: number, expense: number }> = {};
+
+    // Initialize last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const mStr = format(d, 'MMM yyyy');
+      monthlyAggregates[mStr] = { income: 0, expense: 0 };
+    }
 
     // Helper to process revenue
     const processRevenue = (data: any[] | null) => {
       data?.forEach(item => {
         const dateStr = item.created_at.split('T')[0];
+        const monthStr = format(new Date(item.created_at), 'MMM yyyy');
         const amount = Number(item.total_amount);
 
-        monthlyIncome += amount;
+        if (dateStr >= firstDayOfMonth) {
+          monthlyIncome += amount;
+        }
         if (dateStr === today) {
           dailyIncome += amount;
         }
 
         dailyRevenues[dateStr] = (dailyRevenues[dateStr] || 0) + amount;
+        if (monthlyAggregates[monthStr]) {
+          monthlyAggregates[monthStr].income += amount;
+        }
       });
     };
+
+    mExpData?.forEach(item => {
+      const monthStr = format(new Date(item.expense_date), 'MMM yyyy');
+      if (monthlyAggregates[monthStr]) {
+        monthlyAggregates[monthStr].expense += Number(item.amount);
+      }
+    });
 
     processRevenue(rentalData);
     processRevenue(tailoringData);
 
     const netProfit = monthlyIncome - monthlyExpenses;
 
-    // Build Chart Data (last 7 days or whole month depending on preference, we'll do whole month up to today)
+    // Build Chart Data (Daily for current month)
     const newChartData = [];
     let start = new Date(firstDayOfMonth);
     const end = new Date(today);
@@ -167,7 +204,14 @@ export default function Dashboard() {
       start.setDate(start.getDate() + 1);
     }
 
+    const newMonthlyChartData = Object.entries(monthlyAggregates).map(([name, data]) => ({
+      name,
+      income: data.income,
+      expense: data.expense
+    }));
+
     setChartData(newChartData);
+    setMonthlyChartData(newMonthlyChartData);
 
     setStats({
       historyCount: hCount || 0,
@@ -186,17 +230,16 @@ export default function Dashboard() {
 
   const handleDeliverAndPrint = async (order: any) => {
     setLoading(true);
-    // Change status to Completed
-    const { error } = await supabase
-      .from("tailoring_orders")
-      .update({ status: "Completed" })
-      .eq("id", order.id);
+    // Generate PDF
+    await generateTailoringPDF(order, `Receipt_${order.invoice_id}.pdf`);
+    
+    // Archive (delete) the order after delivery since statuses are only Pending/Complete
+    await supabase.from("tailoring_items").delete().eq("tailoring_order_id", order.id);
+    const { error } = await supabase.from("tailoring_orders").delete().eq("id", order.id);
 
     if (error) {
-      alert("Error updating status: " + error.message);
+      alert("Error archiving order: " + error.message);
     } else {
-      // Generate PDF
-      await generatePDFReceipt("tailoring-receipt", `Receipt_${order.invoice_id}.pdf`);
       // Refresh data
       fetchStats();
     }
@@ -321,6 +364,49 @@ export default function Dashboard() {
           </div>
         </motion.div>
 
+        {/* Monthly Income vs Expenses Chart */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden group"
+        >
+          <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-green-500/10 blur-[100px] rounded-full pointer-events-none" />
+          
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-6">
+              <div className="space-y-1">
+                <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Financial Overview</h3>
+                <h2 className="text-white font-black text-2xl tracking-tighter">Income vs Expenses (6M)</h2>
+              </div>
+            </div>
+
+            <div className="h-64 w-full mb-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 'bold' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 'bold' }} tickFormatter={(val) => `Rs.${val/1000}k`} />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                    contentStyle={{
+                      backgroundColor: '#1c1c1e',
+                      borderColor: 'rgba(255,255,255,0.1)',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      color: '#ffffff'
+                    }}
+                    formatter={(value: any) => formatCurrency(Number(value))}
+                  />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', paddingTop: '10px' }} />
+                  <Bar dataKey="income" name="Income" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="expense" name="Expenses" fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </motion.div>
+
         {/* Global Search Bar */}
         <GlobalSearch />
 
@@ -344,99 +430,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Ready for Collection Section */}
-        {readyOrders.length > 0 && (
-          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Ready for Collection</h3>
-                <h2 className="text-white font-black text-2xl tracking-tighter">Finished Jobs</h2>
-              </div>
-              <span className="bg-green-500/20 text-green-500 text-[10px] font-black px-3 py-1 rounded-full">{readyOrders.length} Orders</span>
-            </div>
-
-            {/* Search Bar */}
-            <div className="relative group mb-6">
-              <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-500 group-focus-within:text-[#D4AF37] transition-colors">
-                <Search size={18} />
-              </div>
-              <input
-                type="text"
-                placeholder="Search by Name, Phone, or KT-Number..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#1C1C1E] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/50 transition-all placeholder:text-gray-600"
-              />
-            </div>
-
-            {/* Orders List */}
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {readyOrders.filter(order =>
-                order.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                order.customer_phone.includes(searchQuery) ||
-                order.invoice_id.toLowerCase().includes(searchQuery.toLowerCase())
-              ).map((order) => (
-                <div key={order.id} className="bg-[#1C1C1E]/50 rounded-2xl p-4 border border-white/5">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[10px] bg-[#D4AF37]/10 text-[#D4AF37] px-2 py-0.5 rounded-lg border border-[#D4AF37]/20 font-black tracking-widest uppercase">
-                          {order.invoice_id}
-                        </span>
-                        <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded-lg border border-white/5 font-bold uppercase">
-                          {order.items?.length || 0} Items
-                        </span>
-                      </div>
-                      <h4 className="text-lg font-black text-white">{order.customer_name}</h4>
-                      <p className="text-gray-400 text-sm">{order.customer_phone}</p>
-                    </div>
-                    <a href={`tel:${order.customer_phone}`} className="bg-[#34C759] text-white p-2 rounded-full hover:bg-[#34C759]/80 transition-colors">
-                      <Phone size={16} fill="currentColor" />
-                    </a>
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <div className="text-right">
-                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Balance Due</p>
-                      <p className="text-lg font-black text-red-500">{formatCurrency(order.balance_due)}</p>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Link
-                        href={`/tailoring?id=${order.id}`}
-                        className="bg-white/5 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-colors flex items-center"
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        onClick={() => handleDeleteOrder(order.id)}
-                        className="bg-red-500/20 text-red-500 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-500/30 transition-colors"
-                      >
-                        Delete
-                      </button>
-                      <button
-                        onClick={() => handleDeliverAndPrint(order)}
-                        disabled={loading}
-                        className="bg-[#D4AF37] text-black px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-[#D4AF37]/80 transition-colors"
-                      >
-                        {loading ? "..." : "Deliver & Print"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Action Pills - Cleaner look */}
-        <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
-          {["Sales Log", "Quick Booking", "Inventory Status"].map((label) => (
-            <button key={label} className="bg-white/5 border border-white/5 py-3 px-6 rounded-2xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap hover:bg-[#D4AF37] hover:text-black transition-all active:scale-95">
-              {label}
-            </button>
-          ))}
-        </div>
 
         {/* Status List */}
         <div className="space-y-4">
@@ -482,7 +475,7 @@ export default function Dashboard() {
               className="bg-[#1C1C1E]/50 backdrop-blur-md cursor-pointer hover:bg-white/5 transition-all"
             />
           </Link>
-          <Link href="/tailoring?status=Ready">
+          <Link href="/tailoring?status=Completed">
             <StatusCard
               title="Ready for Collection"
               subtitle="Finished jobs waiting for pickup"

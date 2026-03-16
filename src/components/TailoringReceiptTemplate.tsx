@@ -1,6 +1,5 @@
 import React, { forwardRef } from "react";
 import { format } from "date-fns";
-import { Scissors, User, Phone, MapPin, Receipt, Scissors as ScissorsIcon } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 interface TailoringItem {
@@ -43,7 +42,6 @@ export const TailoringReceiptTemplate = forwardRef<HTMLDivElement, TailoringRece
       <div 
         ref={ref}
         id="tailoring-receipt"
-        className="p-16 font-sans flex flex-col"
         style={{
           width: '794px',
           backgroundColor: '#ffffff',
@@ -54,54 +52,58 @@ export const TailoringReceiptTemplate = forwardRef<HTMLDivElement, TailoringRece
           boxSizing: 'border-box',
           fontSize: '14px',
           minHeight: '1123px',
+          padding: '64px',
+          fontFamily: 'Helvetica, Arial, sans-serif',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         {/* Header */}
-        <div className="flex justify-between items-start mb-12 pb-8" style={{ borderBottom: '3px solid #D4AF37' }}>
-          <div className="flex gap-6 items-center">
-            <img src="/logo.jpg" alt="Logo" className="h-24 w-24 object-contain" />
-            <div className="space-y-1">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '48px', paddingBottom: '32px', borderBottom: '3px solid #D4AF37' }}>
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+            <img src="/logo.jpg" alt="Logo" style={{ height: '96px', width: '96px', objectFit: 'contain' }} />
+            <div>
               <h1 style={{ margin: 0, padding: 0, fontSize: '56px', fontWeight: '950', color: '#D4AF37', letterSpacing: '-0.04em', lineHeight: '0.9' }}>KABAAYA</h1>
-              <p style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.4em', color: '#6B7280' }}>Bespoke Tailoring & Luxury Wear</p>
+              <p style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.4em', color: '#6B7280', margin: 0, marginTop: '4px' }}>Bespoke Tailoring & Luxury Wear</p>
               <div style={{ fontSize: '12px', fontWeight: '700', color: '#111827', marginTop: '8px' }}>
                 <p style={{ margin: 0 }}>No 188, Galagama, Belihuloya</p>
                 <p style={{ margin: 0 }}>Tel: 071 8932662 / 076 0201662</p>
               </div>
             </div>
           </div>
-          <div className="text-right">
+          <div style={{ textAlign: 'right' }}>
             <div style={{ backgroundColor: '#D4AF37', color: '#FFFFFF', padding: '12px 24px', borderRadius: '12px', display: 'inline-block' }}>
               <h2 style={{ fontSize: '20px', fontWeight: '900', margin: 0, letterSpacing: '0.05em' }}>RECEIPT</h2>
             </div>
-            <div className="mt-4">
-              <p style={{ fontSize: '16px', fontWeight: '900', color: '#000000' }}>{data.invoice_id}</p>
-              <p style={{ fontSize: '10px', fontWeight: '800', color: '#9CA3AF', textTransform: 'uppercase' }}>CR Page: {data.cr_book_page_number}</p>
-              <p style={{ fontSize: '11px', fontWeight: '700', marginTop: '4px' }}>Date: {format(new Date(data.created_at || new Date()), "MMM dd, yyyy")}</p>
+            <div style={{ marginTop: '16px' }}>
+              <p style={{ fontSize: '16px', fontWeight: '900', color: '#000000', margin: 0 }}>{data.invoice_id}</p>
+              <p style={{ fontSize: '10px', fontWeight: '800', color: '#9CA3AF', textTransform: 'uppercase', margin: 0, marginTop: '4px' }}>CR Page: {data.cr_book_page_number}</p>
+              <p style={{ fontSize: '11px', fontWeight: '700', marginTop: '4px', margin: 0 }}>Date: {format(new Date(data.created_at || new Date()), "MMM dd, yyyy")}</p>
             </div>
           </div>
         </div>
 
         {/* Customer Info */}
-        <div className="grid grid-cols-2 gap-12 mb-12 p-10" style={{ backgroundColor: '#F9FAFB', borderRadius: '32px', border: '1px solid #F3F4F6' }}>
-          <div className="space-y-2">
-            <p style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.2em', color: '#9CA3AF' }}>Billed To</p>
-            <p style={{ fontSize: '22px', fontWeight: '950', color: '#111827', lineHeight: '1.1' }}>{data.customer_name}</p>
-            <div className="flex items-center gap-2 text-gray-600 font-bold">
-              <Phone size={14} />
-              <p style={{ fontSize: '14px' }}>{data.customer_phone}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px', marginBottom: '48px', padding: '40px', backgroundColor: '#F9FAFB', borderRadius: '32px', border: '1px solid #F3F4F6' }}>
+          <div>
+            <p style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.2em', color: '#9CA3AF', margin: 0 }}>Billed To</p>
+            <p style={{ fontSize: '22px', fontWeight: '950', color: '#111827', lineHeight: '1.1', margin: 0, marginTop: '8px' }}>{data.customer_name}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6B7280', fontWeight: '700', marginTop: '8px' }}>
+              <span style={{ fontSize: '14px' }}>📞</span>
+              <p style={{ fontSize: '14px', margin: 0 }}>{data.customer_phone}</p>
             </div>
           </div>
-          <div className="text-right space-y-2">
-            <p style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.2em', color: '#9CA3AF' }}>Collection Date</p>
-            <p style={{ fontSize: '22px', fontWeight: '950', color: '#D4AF37' }}>{data.due_date ? format(new Date(data.due_date), "MMM dd, yyyy") : 'TBD'}</p>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.2em', color: '#9CA3AF', margin: 0 }}>Collection Date</p>
+            <p style={{ fontSize: '22px', fontWeight: '950', color: '#D4AF37', margin: 0, marginTop: '8px' }}>{data.due_date ? format(new Date(data.due_date), "MMM dd, yyyy") : 'TBD'}</p>
             {data.customer_address && (
-              <p style={{ fontSize: '12px', fontWeight: '600', color: '#6B7280' }}>{data.customer_address}</p>
+              <p style={{ fontSize: '12px', fontWeight: '600', color: '#6B7280', margin: 0, marginTop: '8px' }}>{data.customer_address}</p>
             )}
           </div>
         </div>
 
         {/* Itemized Table */}
-        <div className="mb-12 flex-grow overflow-hidden" style={{ borderRadius: '24px', border: '1px solid #F3F4F6' }}>
+        <div style={{ marginBottom: '48px', flexGrow: 1, overflow: 'hidden', borderRadius: '24px', border: '1px solid #F3F4F6' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#000000' }}>
@@ -116,8 +118,8 @@ export const TailoringReceiptTemplate = forwardRef<HTMLDivElement, TailoringRece
               {data.items.map((item, index) => (
                 <tr key={index} style={{ borderBottom: '1px solid #F3F4F6' }}>
                   <td style={{ padding: '24px 20px' }}>
-                    <p style={{ fontSize: '14px', fontWeight: '900', color: '#111827' }}>{item.item_description}</p>
-                    <p style={{ fontSize: '10px', fontWeight: '800', color: '#D4AF37', textTransform: 'uppercase', marginTop: '2px' }}>Code: {item.item_code || '---'}</p>
+                    <p style={{ fontSize: '14px', fontWeight: '900', color: '#111827', margin: 0 }}>{item.item_description}</p>
+                    <p style={{ fontSize: '10px', fontWeight: '800', color: '#D4AF37', textTransform: 'uppercase', marginTop: '2px', margin: 0 }}>Code: {item.item_code || '---'}</p>
                   </td>
                   <td style={{ padding: '24px 20px', textAlign: 'center' }}>
                     {item.fabric_source === 'Customer Provided' ? (
@@ -131,9 +133,9 @@ export const TailoringReceiptTemplate = forwardRef<HTMLDivElement, TailoringRece
                   </td>
                   <td style={{ padding: '24px 20px', textAlign: 'right' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#6B7280' }}>
-                      <p>Stitching: {formatCurrency(item.stitching_price)}</p>
+                      <p style={{ margin: 0 }}>Stitching: {formatCurrency(item.stitching_price)}</p>
                       {item.fabric_source === 'Shop Stock' && (
-                        <p>Fabric: {formatCurrency(item.total_fabric_cost)}</p>
+                        <p style={{ margin: 0 }}>Fabric: {formatCurrency(item.total_fabric_cost)}</p>
                       )}
                     </div>
                   </td>
@@ -148,22 +150,22 @@ export const TailoringReceiptTemplate = forwardRef<HTMLDivElement, TailoringRece
 
         {/* Financial Summary */}
         <div style={{ marginLeft: 'auto', width: '45%' }}>
-          <div className="space-y-4 p-8" style={{ backgroundColor: '#F9FAFB', borderRadius: '24px' }}>
-            <div className="flex justify-between items-center pb-3" style={{ borderBottom: '1px solid #E5E7EB' }}>
+          <div style={{ padding: '32px', backgroundColor: '#F9FAFB', borderRadius: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid #E5E7EB', marginBottom: '16px' }}>
               <span style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: '#6B7280' }}>Bill Subtotal</span>
               <span style={{ fontSize: '14px', fontWeight: '800' }}>{formatCurrency(subtotal)}</span>
             </div>
             {data.discount_amount > 0 && (
-              <div className="flex justify-between items-center pb-3" style={{ borderBottom: '1px solid #E5E7EB' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid #E5E7EB', marginBottom: '16px' }}>
                 <span style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: '#EF4444' }}>Discount</span>
                 <span style={{ fontSize: '14px', fontWeight: '800', color: '#EF4444' }}>-{formatCurrency(subtotal - data.grand_total)}</span>
               </div>
             )}
-            <div className="flex justify-between items-center pb-3">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', marginBottom: '16px' }}>
               <span style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: '#6B7280' }}>Advance Paid</span>
               <span style={{ fontSize: '14px', fontWeight: '800', color: '#10B981' }}>{formatCurrency(data.advance_paid)}</span>
             </div>
-            <div className="flex justify-between items-center pt-2">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px' }}>
               <span style={{ fontSize: '12px', fontWeight: '900', textTransform: 'uppercase', color: '#000000' }}>Final Balance</span>
               <span style={{ fontSize: '28px', fontWeight: '950', color: '#D4AF37', letterSpacing: '-0.02em' }}>{formatCurrency(balanceDue)}</span>
             </div>
@@ -171,12 +173,12 @@ export const TailoringReceiptTemplate = forwardRef<HTMLDivElement, TailoringRece
         </div>
 
         {/* Footer */}
-        <div className="mt-auto pt-12 text-center space-y-4">
-          <div style={{ padding: '20px', backgroundColor: '#FFFBEB', borderRadius: '16px', border: '1px solid #FEF3C7', color: '#92400E' }}>
-            <p style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Terms & Conditions</p>
-            <p style={{ fontSize: '12px', marginTop: '4px', fontWeight: '600' }}>Please retain this receipt for garment collection. KABAAYA holds no responsibility for unclaimed items after 60 days. Delivery dates are subject to work volume.</p>
+        <div style={{ marginTop: 'auto', paddingTop: '48px', textAlign: 'center' }}>
+          <div style={{ padding: '20px', backgroundColor: '#FFFBEB', borderRadius: '16px', border: '1px solid #FEF3C7', color: '#92400E', marginBottom: '16px' }}>
+            <p style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Terms & Conditions</p>
+            <p style={{ fontSize: '12px', marginTop: '4px', fontWeight: '600', margin: 0 }}>Please retain this receipt for garment collection. KABAAYA holds no responsibility for unclaimed items after 60 days. Delivery dates are subject to work volume.</p>
           </div>
-          <p style={{ fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#9CA3AF' }}>Thank you for choosing KABAAYA</p>
+          <p style={{ fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#9CA3AF', margin: 0 }}>Thank you for choosing KABAAYA</p>
         </div>
       </div>
     );
