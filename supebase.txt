@@ -1,0 +1,18 @@
+project name-akcowxtpheyqzmeetovl
+main pasword-LJ64Hi+dJSSPJ6C
+
+API URL-https://akcowxtpheyqzmeetovl.supabase.co
+
+Publishable key- sb_publishable_Ryrzjq5ofA3heEK7jeqWXw_lxe5f886
+
+anon public -eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrY293eHRwaGV5cXptZWV0b3ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwOTI4MTcsImV4cCI6MjA4ODY2ODgxN30.avydN1h369Da_BTmtx9cT-yfIEaiVoDC1-74YnaVORE
+
+service_role- eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrY293eHRwaGV5cXptZWV0b3ZsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzA5MjgxNywiZXhwIjoyMDg4NjY4ODE3fQ.-5f_w4o7hmfF_JnM9aZ8IiDvOK-ZXJPOoDdaAei_v5s
+
+
+
+
+
+
+ http://localhost:3001
+- Network:       http://10.120.198.131:3001
