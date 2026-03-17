@@ -291,22 +291,24 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: DARK_HEADER,
     borderRadius: 3,
-    padding: 10,
+    padding: 12,
     marginTop: 15,
+    flexDirection: 'column',
   },
   agreementTitle: {
     fontSize: 10,
     fontFamily: 'Helvetica-Bold',
     color: DARK_HEADER,
-    marginBottom: 6,
+    marginBottom: 8,
     textTransform: 'uppercase',
   },
-  agreementItem: {
+  agreementRow: {
     flexDirection: 'row',
-    marginBottom: 4,
+    marginBottom: 5,
+    alignItems: 'flex-start',
   },
   agreementBullet: {
-    width: 10,
+    width: 12,
     fontSize: 9,
     fontFamily: 'Helvetica-Bold',
     color: GOLD,
@@ -316,6 +318,7 @@ export const styles = StyleSheet.create({
     fontSize: 8.5,
     color: MID_TEXT,
     lineHeight: 1.4,
+    textAlign: 'left',
   },
   agreementHighlight: {
     fontFamily: 'Helvetica-Bold',

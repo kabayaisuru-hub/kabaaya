@@ -1,6 +1,7 @@
 import React from 'react';
 import { Document, Page, View, Text, Image, StyleSheet } from '@react-pdf/renderer';
 import { styles, GOLD } from './SharedStyles';
+import { KABAAYA_LOGO_BASE64 } from './LogoBase64';
 import { format } from 'date-fns';
 
 const formatCurrency = (amount: number) =>
@@ -34,7 +35,7 @@ const sigStyles = StyleSheet.create({
 
 const Header = () => (
   <View style={styles.header}>
-    <Image src="/logo.jpg" style={styles.logo} />
+    <Image src={KABAAYA_LOGO_BASE64} style={styles.logo} />
     <Text style={styles.brandName}>KABAAYA</Text>
     <Text style={styles.tagline}>PREMIUM WEDDING WEAR &amp; LUXURY TAILORING</Text>
     <Text style={styles.addressLine}>No 188, Galagama, Belihuloya</Text>
@@ -118,7 +119,7 @@ export const RentalInvoicePDF = ({ data }: { data: RentalData }) => {
         <View style={styles.agreementBox}>
           <Text style={styles.agreementTitle}>Rental Agreement & Conditions</Text>
           
-          <View style={styles.agreementItem}>
+          <View style={styles.agreementRow}>
             <Text style={styles.agreementBullet}>•</Text>
             <Text style={styles.agreementText}>
               <Text style={{ fontFamily: 'Helvetica-Bold' }}>Return Date & Time: </Text>
@@ -128,7 +129,7 @@ export const RentalInvoicePDF = ({ data }: { data: RentalData }) => {
             </Text>
           </View>
 
-          <View style={styles.agreementItem}>
+          <View style={styles.agreementRow}>
             <Text style={styles.agreementBullet}>•</Text>
             <Text style={styles.agreementText}>
               <Text style={{ fontFamily: 'Helvetica-Bold' }}>Late Fee: </Text>
@@ -136,7 +137,7 @@ export const RentalInvoicePDF = ({ data }: { data: RentalData }) => {
             </Text>
           </View>
 
-          <View style={styles.agreementItem}>
+          <View style={styles.agreementRow}>
             <Text style={styles.agreementBullet}>•</Text>
             <Text style={styles.agreementText}>
               <Text style={{ fontFamily: 'Helvetica-Bold' }}>Damage Policy: </Text>
@@ -144,7 +145,7 @@ export const RentalInvoicePDF = ({ data }: { data: RentalData }) => {
             </Text>
           </View>
 
-          <View style={styles.agreementItem}>
+          <View style={styles.agreementRow}>
             <Text style={styles.agreementBullet}>•</Text>
             <Text style={styles.agreementText}>
               <Text style={{ fontFamily: 'Helvetica-Bold' }}>Cleaning: </Text>
@@ -152,7 +153,7 @@ export const RentalInvoicePDF = ({ data }: { data: RentalData }) => {
             </Text>
           </View>
 
-          <View style={styles.agreementItem}>
+          <View style={styles.agreementRow}>
             <Text style={styles.agreementBullet}>•</Text>
             <Text style={styles.agreementText}>
               <Text style={{ fontFamily: 'Helvetica-Bold' }}>Security Deposit: </Text>
