@@ -47,6 +47,7 @@ const Header = () => (
 
 export const RentalInvoicePDF = ({ data }: { data: RentalData }) => {
   const balance = (data.total_amount ?? 0) - (data.advance_paid ?? 0);
+  const returnDate = data.items && data.items.length > 0 ? data.items[0].return_date : null;
 
   return (
     <Document>
@@ -110,6 +111,53 @@ export const RentalInvoicePDF = ({ data }: { data: RentalData }) => {
               <Text style={styles.summaryLabelGold}>Balance Due</Text>
               <Text style={styles.summaryValueGold}>{formatCurrency(balance)}</Text>
             </View>
+          </View>
+        </View>
+
+        {/* Rental Agreement Box */}
+        <View style={styles.agreementBox}>
+          <Text style={styles.agreementTitle}>Rental Agreement & Conditions</Text>
+          
+          <View style={styles.agreementItem}>
+            <Text style={styles.agreementBullet}>•</Text>
+            <Text style={styles.agreementText}>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>Return Date & Time: </Text>
+              <Text style={styles.agreementHighlight}>
+                {returnDate ? format(new Date(returnDate), 'dd MMM yyyy') : 'N/A'} (Please return on time)
+              </Text>
+            </Text>
+          </View>
+
+          <View style={styles.agreementItem}>
+            <Text style={styles.agreementBullet}>•</Text>
+            <Text style={styles.agreementText}>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>Late Fee: </Text>
+              A penalty of Rs. 250.00 will be charged for each day the item is returned late.
+            </Text>
+          </View>
+
+          <View style={styles.agreementItem}>
+            <Text style={styles.agreementBullet}>•</Text>
+            <Text style={styles.agreementText}>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>Damage Policy: </Text>
+              The customer is strictly responsible for any stains, tears, burns, or broken buttons. Repair or replacement costs will be charged accordingly.
+            </Text>
+          </View>
+
+          <View style={styles.agreementItem}>
+            <Text style={styles.agreementBullet}>•</Text>
+            <Text style={styles.agreementText}>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>Cleaning: </Text>
+              DO NOT WASH. We handle the dry cleaning process.
+            </Text>
+          </View>
+
+          <View style={styles.agreementItem}>
+            <Text style={styles.agreementBullet}>•</Text>
+            <Text style={styles.agreementText}>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>Security Deposit: </Text>
+              Refundable only if the item is returned in its original condition.
+            </Text>
           </View>
         </View>
 

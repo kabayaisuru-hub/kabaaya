@@ -286,12 +286,39 @@ export const styles = StyleSheet.create({
     color: GOLD,
   },
 
-  // --- Notes ---
-  noteText: {
-    fontSize: 8,
-    color: LIGHT_TEXT,
-    fontStyle: 'italic',
-    marginTop: 6,
-    maxWidth: '55%',
+  // --- Rental Agreement ---
+  agreementBox: {
+    borderWidth: 1,
+    borderColor: DARK_HEADER,
+    borderRadius: 3,
+    padding: 10,
+    marginTop: 15,
+  },
+  agreementTitle: {
+    fontSize: 10,
+    fontFamily: 'Helvetica-Bold',
+    color: DARK_HEADER,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  agreementItem: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  agreementBullet: {
+    width: 10,
+    fontSize: 9,
+    fontFamily: 'Helvetica-Bold',
+    color: GOLD,
+  },
+  agreementText: {
+    flex: 1,
+    fontSize: 8.5,
+    color: MID_TEXT,
+    lineHeight: 1.4,
+  },
+  agreementHighlight: {
+    fontFamily: 'Helvetica-Bold',
+    color: '#CC0000', // Red for emphasis
   },
 });
