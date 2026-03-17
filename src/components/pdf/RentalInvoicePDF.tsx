@@ -173,7 +173,7 @@ export const RentalInvoicePDF = ({ data }: { data: RentalData }) => {
           </View>
           <View style={styles.signatureBlockRight}>
             <View style={styles.signatureLine} />
-            <Text style={[styles.signatureLabel, { textAlign: 'right' }]}>Authorized Signature</Text>
+            <Text style={styles.signatureLabel}>Authorized Signature</Text>
           </View>
         </View>
 

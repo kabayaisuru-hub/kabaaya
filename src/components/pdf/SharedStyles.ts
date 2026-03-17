@@ -238,23 +238,25 @@ export const styles = StyleSheet.create({
   signatureSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-end', // Ground both blocks at the bottom
     marginTop: 30,
   },
   signatureBlock: {
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems: 'center', // Center content under the line
     width: '40%',
   },
   signatureBlockRight: {
     flexDirection: 'column',
-    alignItems: 'flex-end',
+    alignItems: 'center', // Center content under the line
     width: '40%',
   },
   signatureLine: {
-    borderBottomWidth: 1,
-    borderBottomColor: DARK_TEXT,
+    borderTopWidth: 1,
+    borderTopColor: DARK_TEXT,
     width: '100%',
-    marginBottom: 4,
+    paddingTop: 6, // Distance between line and label
+    boxSizing: 'border-box',
   },
   signatureLabel: {
     fontSize: 8,
@@ -262,6 +264,7 @@ export const styles = StyleSheet.create({
     color: LIGHT_TEXT,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    textAlign: 'center',
   },
 
   // --- Footer ---
