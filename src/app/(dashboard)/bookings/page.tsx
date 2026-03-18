@@ -58,6 +58,7 @@ interface Booking {
   created_at: string;
   signature_url?: string;
   signature_data?: string;
+  invoice_no?: number;
 }
 
 function BookingsContent() {
@@ -305,10 +306,10 @@ function BookingsContent() {
     if (insertError) {
       setConflictAlert("Error saving booking: " + insertError.message);
     } else {
-      // Create custom display-only invoice number matching KB-1500+ logic
-      const { count } = await supabase.from('bookings').select('*', { count: 'exact', head: true });
-      const currentCount = count || 1;
-      const customInvoiceNo = `KB-${1500 + currentCount}`;
+      // Use the database-generated invoice number
+      const savedBooking = insertedData[0];
+      const invoiceNo = savedBooking.invoice_no;
+      const displayInvoiceNo = `KB-${invoiceNo}`;
       
       const newBookingObj = {
         customer_name: formData.customer_name,
@@ -322,7 +323,7 @@ function BookingsContent() {
         total_amount: formData.total_amount,
         advance_paid: formData.advance_paid,
         signature_data: signatureData || editingBooking?.signature_url,
-        invoice_no: customInvoiceNo
+        invoice_no: displayInvoiceNo
       };
       
       setLastBooking(newBookingObj);
@@ -1185,7 +1186,7 @@ function BookingsContent() {
               <div className="p-4 bg-[#121212] border-t border-white/5 shrink-0 space-y-3">
                   <button
                     onClick={async () => {
-                        const customInvoiceNo = `KB-${1500 + bookings.length}`; // Approximation
+                        const displayInvoiceNo = `KB-${viewingBooking.invoice_no}`;
                         const data = {
                             customer_name: viewingBooking.customer_name,
                             customer_phone: viewingBooking.customer_phone,
@@ -1200,10 +1201,10 @@ function BookingsContent() {
                             total_amount: viewingBooking.total_amount,
                             advance_paid: viewingBooking.advance_paid,
                             signature_data: viewingBooking.signature_data || viewingBooking.signature_url,
-                            invoice_no: customInvoiceNo
+                            invoice_no: displayInvoiceNo
                         };
                         setLoading(true);
-                        const filename = `${customInvoiceNo}_${viewingBooking.customer_name.replace(/\s+/g, "_")}.pdf`;
+                        const filename = `${displayInvoiceNo}_${viewingBooking.customer_name.replace(/\s+/g, "_")}.pdf`;
                         await generatePDFReceipt(data, filename);
                         setLoading(false);
                     }}

@@ -14,7 +14,7 @@ interface RentalItem {
 }
 
 interface RentalData {
-  invoice_no?: string;
+  invoice_no?: string | number;
   customer_name: string;
   customer_phone: string;
   customer_nic: string;
