@@ -1,5 +1,5 @@
 import React from 'react';
-import { Document, Page, View, Text, Image, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, View, Text, Image, StyleSheet, Svg, Polyline } from '@react-pdf/renderer';
 import { styles, GOLD } from './SharedStyles';
 import { KABAAYA_LOGO_BASE64 } from './LogoBase64';
 import { format } from 'date-fns';
@@ -31,7 +31,46 @@ const sigStyles = StyleSheet.create({
     objectFit: 'contain',
     marginBottom: 4,
   },
+  signatureSvg: {
+    width: 150,
+    height: 60,
+    marginBottom: 4,
+  },
 });
+
+const Signature = ({ data }: { data?: string }) => {
+  if (!data) return null;
+
+  try {
+    // Check if it's a JSON string (points array)
+    if (data.startsWith('[') && data.endsWith(']')) {
+      const points = JSON.parse(data);
+      
+      // Calculate bounding box to scale/translate correctly if needed
+      // For now, assume the canvas size was consistent or we can just render it.
+      // Signature Pad coordinates are based on the canvas size at the time of signing.
+      
+      return (
+        <Svg style={sigStyles.signatureSvg} viewBox="0 0 500 150">
+          {points.map((stroke: any[], i: number) => (
+            <Polyline
+              key={i}
+              points={stroke.map(p => `${p.x},${p.y}`).join(' ')}
+              fill="none"
+              stroke="black"
+              strokeWidth={2}
+            />
+          ))}
+        </Svg>
+      );
+    }
+  } catch (e) {
+    // If parsing fails, it might be a URL
+  }
+
+  // Fallback to Image if it's a URL or base64 PNG
+  return <Image src={data} style={sigStyles.signatureImage} />;
+};
 
 const Header = () => (
   <View style={styles.header}>
@@ -165,9 +204,7 @@ export const RentalInvoicePDF = ({ data }: { data: RentalData }) => {
         {/* Signatures */}
         <View style={styles.signatureSection}>
           <View style={styles.signatureBlock}>
-            {data.signature_data ? (
-              <Image src={data.signature_data} style={sigStyles.signatureImage} />
-            ) : null}
+            <Signature data={data.signature_data} />
             <View style={styles.signatureLine} />
             <Text style={styles.signatureLabel}>Customer Signature</Text>
           </View>

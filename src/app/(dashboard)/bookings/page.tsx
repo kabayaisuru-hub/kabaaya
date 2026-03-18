@@ -56,7 +56,8 @@ interface Booking {
   advance_paid: number;
   status: "Confirmed" | "PickedUp" | "Returned" | "Cancelled";
   created_at: string;
-  signature_url?: string; // Added for Supabase storage uploads
+  signature_url?: string;
+  signature_data?: string;
 }
 
 function BookingsContent() {
@@ -258,51 +259,15 @@ function BookingsContent() {
         }
     }
 
-    // 2. Upload Signature to Supabase Storage if exists
-    let signatureUrl: string | undefined = undefined;
-    let signatureDataPayload: string | undefined = undefined;
+    // 2. Capture Signature as JSON / Points
+    let signatureData: string | undefined = undefined;
     
     if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-       // Use PNG to preserve transparent background (JPEG fills transparent with black)
-       signatureDataPayload = sigCanvas.current.getSignaturePad().toDataURL("image/png");
-       
-       try {
-         const byteString = atob(signatureDataPayload.split(',')[1]);
-         const mimeString = signatureDataPayload.split(',')[0].split(':')[1].split(';')[0];
-         const ab = new ArrayBuffer(byteString.length);
-         const ia = new Uint8Array(ab);
-         for (let i = 0; i < byteString.length; i++) {
-             ia[i] = byteString.charCodeAt(i);
-         }
-         const blob = new Blob([ab], { type: mimeString });
-         
-         const fileName = `sig_${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
-         
-         const { data: uploadData, error: uploadError } = await supabase.storage
-           .from('signatures')
-           .upload(fileName, blob, {
-             contentType: 'image/png',
-             cacheControl: '3600',
-             upsert: false
-           });
-           
-         if (uploadError) {
-           console.error("Signature upload failed:", uploadError);
-           alert("Signature Upload Failed: " + uploadError.message);
-         } else if (uploadData) {
-           const { data: publicUrlData } = supabase.storage
-             .from('signatures')
-             .getPublicUrl(fileName);
-             
-           signatureUrl = publicUrlData.publicUrl;
-           console.log("Signature uploaded successfully to:", signatureUrl);
-         }
-       } catch (err) {
-         console.error("Error processing signature image:", err);
-         alert("Error processing signature: " + (err as Error).message);
-       }
-    } else if (editingBooking?.signature_url) {
-      signatureUrl = editingBooking.signature_url;
+       // Capture points as JSON string
+       const points = sigCanvas.current.toData();
+       signatureData = JSON.stringify(points);
+    } else if (editingBooking?.signature_data) {
+      signatureData = editingBooking.signature_data;
     }
 
     // 3. Save/Update booking
@@ -317,7 +282,8 @@ function BookingsContent() {
       total_amount: formData.total_amount,
       advance_paid: formData.advance_paid,
       status: editingBooking ? editingBooking.status : "Confirmed",
-      signature_url: signatureUrl,
+      signature_url: editingBooking?.signature_url, // Keep old URL if it exists
+      signature_data: signatureData,
     };
 
     let result;
@@ -355,7 +321,7 @@ function BookingsContent() {
         })),
         total_amount: formData.total_amount,
         advance_paid: formData.advance_paid,
-        signature_data: (signatureUrl || signatureDataPayload) || undefined, // Fallback to undefined if nothing exists
+        signature_data: signatureData || editingBooking?.signature_url,
         invoice_no: customInvoiceNo
       };
       
@@ -1229,7 +1195,7 @@ function BookingsContent() {
                                 })),
                             total_amount: viewingBooking.total_amount,
                             advance_paid: viewingBooking.advance_paid,
-                            signature_data: viewingBooking.signature_url,
+                            signature_data: viewingBooking.signature_data || viewingBooking.signature_url,
                             invoice_no: customInvoiceNo
                         };
                         setLoading(true);
