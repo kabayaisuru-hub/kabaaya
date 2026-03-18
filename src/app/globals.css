@@ -131,3 +131,20 @@ input:focus-visible {
     width: 100% !important;
   }
 }
+
+/* Premium Logo Pulse Animation */
+@keyframes logo-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-logo-pulse {
+  animation: logo-pulse 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
