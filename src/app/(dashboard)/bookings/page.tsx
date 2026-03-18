@@ -565,6 +565,13 @@ function BookingsContent() {
 
                   <div className="flex justify-between items-start mb-4">
                     <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        {booking.invoice_no && (
+                          <span className="text-[10px] font-black bg-[#D4AF37] text-black px-2 py-1 rounded-md uppercase tracking-wider shadow-lg shadow-[#D4AF37]/20">
+                            KB-{booking.invoice_no}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 flex-wrap">
                         {(booking.item_ids || []).map((id: string) => {
                             const item = inventoryItems.find(i => i.id === id);
