@@ -328,6 +328,10 @@ function BookingsContent() {
       setLastBooking(newBookingObj);
       setShowSuccess(true);
       fetchData();
+      
+      // Close modal and reset form for a smooth user flow
+      setIsFormOpen(false);
+      resetForm();
 
       // --- AUTOMATIC PDF DOWNLOAD TRIGGER ---
       setTimeout(async () => {
