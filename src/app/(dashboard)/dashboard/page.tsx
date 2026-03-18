@@ -291,7 +291,7 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
-    </LinkNext>
+    </Link>
   );
 
   return (
