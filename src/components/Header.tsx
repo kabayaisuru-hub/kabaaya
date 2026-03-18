@@ -22,7 +22,7 @@ export function Header() {
         </button>
         
         <div className="flex flex-col">
-          <div className="relative w-20 h-10 overflow-hidden animate-logo-pulse">
+          <div className="relative w-20 h-10 overflow-hidden animate-logo-spin">
             <Image 
               src="/logo.jpg" 
               alt="Shop Logo" 

@@ -132,19 +132,19 @@ input:focus-visible {
   }
 }
 
-/* Premium Logo Pulse Animation */
-@keyframes logo-pulse {
+/* Premium Logo Spin and Pause Animation */
+@keyframes logo-spin-pause {
   0% {
-    transform: scale(1);
+    transform: rotate(0deg);
   }
-  50% {
-    transform: scale(1.05);
+  20% {
+    transform: rotate(360deg);
   }
   100% {
-    transform: scale(1);
+    transform: rotate(360deg);
   }
 }
 
-.animate-logo-pulse {
-  animation: logo-pulse 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+.animate-logo-spin {
+  animation: logo-spin-pause 10s ease-in-out infinite;
 }
