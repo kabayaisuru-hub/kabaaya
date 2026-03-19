@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { Menu, FileText, Loader2 } from "lucide-react";
 import { generateFinancialReport } from "@/lib/generateFinancialReport";
-import { motion } from "framer-motion";
+import { motion, Variants } from "framer-motion";
 
 export function Header() {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -18,7 +18,7 @@ export function Header() {
   const text = "Premium Wedding Wear";
   const letters = text.split("");
 
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: (i: number = 1) => ({
       opacity: 1,
@@ -26,7 +26,7 @@ export function Header() {
     }),
   };
 
-  const childVariants = {
+  const childVariants: Variants = {
     visible: {
       opacity: 1,
       y: 0,
