@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { Menu, FileText, Loader2 } from "lucide-react";
 import { generateFinancialReport } from "@/lib/generateFinancialReport";
+import { motion } from "framer-motion";
 
 export function Header() {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -14,6 +15,38 @@ export function Header() {
     setIsGenerating(false);
   };
 
+  const text = "Premium Wedding Wear";
+  const letters = text.split("");
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: (i: number = 1) => ({
+      opacity: 1,
+      transition: { staggerChildren: 0.05, delayChildren: 0.04 * i },
+    }),
+  };
+
+  const childVariants = {
+    visible: {
+      opacity: 1,
+      scale: 1,
+      transition: {
+        type: "spring",
+        damping: 12,
+        stiffness: 200,
+      },
+    },
+    hidden: {
+      opacity: 0,
+      scale: 0.5,
+      transition: {
+        type: "spring",
+        damping: 12,
+        stiffness: 200,
+      },
+    },
+  };
+
   return (
     <header className="bg-[#121212]/80 backdrop-blur-md sticky top-0 z-50 px-6 py-5 flex items-center justify-between border-b border-white/5">
       <div className="flex items-center gap-4">
@@ -22,7 +55,7 @@ export function Header() {
         </button>
         
         <div className="flex flex-col">
-          <div className="relative w-20 h-10 overflow-hidden animate-logo-spin">
+          <div className="relative w-20 h-10 overflow-hidden">
             <Image 
               src="/logo.jpg" 
               alt="Shop Logo" 
@@ -31,9 +64,22 @@ export function Header() {
               priority
             />
           </div>
-          <p className="text-[9px] text-[#D4AF37] font-black uppercase tracking-[0.2em] mt-1">
-            Premium Wedding Wear
-          </p>
+          <motion.div 
+            className="flex mt-1"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            {letters.map((letter, index) => (
+              <motion.span
+                key={index}
+                variants={childVariants}
+                className="text-[9px] text-[#D4AF37] font-black uppercase tracking-[0.2em] inline-block"
+              >
+                {letter === " " ? "\u00A0" : letter}
+              </motion.span>
+            ))}
+          </motion.div>
         </div>
       </div>
 
