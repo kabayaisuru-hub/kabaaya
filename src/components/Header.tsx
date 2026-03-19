@@ -29,7 +29,7 @@ export function Header() {
   const childVariants = {
     visible: {
       opacity: 1,
-      scale: 1,
+      y: 0,
       transition: {
         type: "spring",
         damping: 12,
@@ -38,7 +38,7 @@ export function Header() {
     },
     hidden: {
       opacity: 0,
-      scale: 0.5,
+      y: 10,
       transition: {
         type: "spring",
         damping: 12,
@@ -74,7 +74,7 @@ export function Header() {
               <motion.span
                 key={index}
                 variants={childVariants}
-                className="text-[9px] text-[#D4AF37] font-black uppercase tracking-[0.2em] inline-block"
+                className="text-[10px] bg-gradient-to-b from-[#D4AF37] via-[#FFF5D6] to-[#C5A028] bg-clip-text text-transparent font-black uppercase tracking-[0.2em] inline-block filter drop-shadow-[0_0_1px_rgba(212,175,55,0.3)]"
               >
                 {letter === " " ? "\u00A0" : letter}
               </motion.span>
