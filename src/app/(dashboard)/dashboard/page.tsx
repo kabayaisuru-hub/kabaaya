@@ -18,12 +18,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { supabase } from "@/lib/supabase";
 import { cn, formatCurrency } from "@/lib/utils";
 import { FestiveAlert } from "@/components/FestiveAlert";
 import { GlobalSearch } from "@/components/GlobalSearch";
-import { format } from "date-fns";
 import { generateFinancialReport } from "@/lib/generateFinancialReport";
+import { format } from "date-fns";
+import { getDashboardSnapshot } from "@/lib/firebase-db";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -80,186 +80,11 @@ export default function Dashboard() {
   const [reportLoading, setReportLoading] = React.useState(false);
 
   const fetchStats = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-
-    // 1. History (Returned this month)
-    const { count: hCount } = await supabase
-      .from("bookings")
-      .select("*", { count: 'exact', head: true })
-      .eq("status", "Returned")
-      .gte("created_at", firstDayOfMonth);
-
-    // 2. Active Rentals
-    const { count: aCount } = await supabase
-      .from("bookings")
-      .select("*", { count: 'exact', head: true })
-      .in("status", ["Confirmed", "PickedUp"]);
-
-    // 2b. Overdue Rentals
-    const { count: oCount } = await supabase
-      .from("bookings")
-      .select("*", { count: 'exact', head: true })
-      .in("status", ["Confirmed", "PickedUp"])
-      .lt("return_date", today);
-
-    // 3. Ready for Collection
-    const { count: tCount } = await supabase
-      .from("tailoring_orders")
-      .select("*", { count: 'exact', head: true })
-      .eq("status", "Completed");
-
-    // 4. Available Inventory
-    const { count: iCount } = await supabase
-      .from("inventory")
-      .select("*", { count: 'exact', head: true })
-      .eq("status", "Available")
-      .eq("category", "Blazer");
-
-    // 5. Daily Expenses
-    const { data: dExpData } = await supabase
-      .from("expenses")
-      .select("amount")
-      .eq("expense_date", today);
-    const dailyExpenses = dExpData?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
-
-    // 6 Months ago date for Bar Chart
-    const sixMonthsAgoDate = new Date();
-    sixMonthsAgoDate.setMonth(sixMonthsAgoDate.getMonth() - 5);
-    sixMonthsAgoDate.setDate(1);
-    const sixMonthsAgo = sixMonthsAgoDate.toISOString().split('T')[0];
-
-    // 6. Monthly Expenses (last 6 months)
-    const { data: mExpData } = await supabase
-      .from("expenses")
-      .select("amount, expense_date")
-      .gte("expense_date", sixMonthsAgo);
-      
-    const monthlyExpenses = mExpData?.reduce((acc, curr) => {
-      if (curr.expense_date >= firstDayOfMonth) {
-        return acc + Number(curr.amount);
-      }
-      return acc;
-    }, 0) || 0;
-
-    // 7. Income Calcs & Chart Data Generation
-    const { data: rentalData } = await supabase
-      .from("bookings")
-      .select("created_at, total_amount")
-      .neq("status", "Cancelled")
-      .gte("created_at", sixMonthsAgo);
-
-    const { data: tailoringData } = await supabase
-      .from("tailoring_orders")
-      .select("created_at, total_amount")
-      .gte("created_at", sixMonthsAgo);
-
-    let dailyIncome = 0;
-    let monthlyIncome = 0;
-    let rentalTotal = 0;
-    let tailoringTotal = 0;
-    const dailyRevenues: Record<string, number> = {};
-    const monthlyAggregates: Record<string, { income: number, expense: number }> = {};
-
-    // Initialize last 6 months
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const mStr = format(d, 'MMM yyyy');
-      monthlyAggregates[mStr] = { income: 0, expense: 0 };
-    }
-
-    const processRevenue = (data: any[] | null, isRental: boolean) => {
-      data?.forEach(item => {
-        const dateStr = item.created_at.split('T')[0];
-        const monthStr = format(new Date(item.created_at), 'MMM yyyy');
-        const amount = Number(item.total_amount);
-
-        if (dateStr >= firstDayOfMonth) {
-          monthlyIncome += amount;
-          if (isRental) rentalTotal += amount;
-          else tailoringTotal += amount;
-        }
-        if (dateStr === today) {
-          dailyIncome += amount;
-        }
-
-        dailyRevenues[dateStr] = (dailyRevenues[dateStr] || 0) + amount;
-        if (monthlyAggregates[monthStr]) {
-          monthlyAggregates[monthStr].income += amount;
-        }
-      });
-    };
-
-    mExpData?.forEach(item => {
-      const monthStr = format(new Date(item.expense_date), 'MMM yyyy');
-      if (monthlyAggregates[monthStr]) {
-        monthlyAggregates[monthStr].expense += Number(item.amount);
-      }
-    });
-
-    processRevenue(rentalData, true);
-    processRevenue(tailoringData, false);
-
-    const netProfit = monthlyIncome - monthlyExpenses;
-
-    // Build Chart Data (Daily for current month)
-    const newChartData = [];
-    let start = new Date(firstDayOfMonth);
-    const end = new Date(today);
-
-    while (start <= end) {
-      const dStr = start.toISOString().split('T')[0];
-      newChartData.push({
-        name: format(start, 'MMM dd'),
-        revenue: dailyRevenues[dStr] || 0
-      });
-      start.setDate(start.getDate() + 1);
-    }
-
-    const newMonthlyChartData = Object.entries(monthlyAggregates).map(([name, data]) => ({
-      name,
-      income: data.income,
-      expense: data.expense
-    }));
-
-    // Recent Activity
-    const { data: recentB } = await supabase
-      .from("bookings")
-      .select("id, customer_name, total_amount, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(5);
-
-    const { data: recentT } = await supabase
-      .from("tailoring_orders")
-      .select("id, customer_name, total_amount, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(5);
-
-    const combined = [
-      ...(recentB?.map(b => ({ ...b, type: 'Rental' })) || []),
-      ...(recentT?.map(t => ({ ...t, type: 'Tailoring' })) || [])
-    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 10);
-
-    setChartData(newChartData);
-    setMonthlyChartData(newMonthlyChartData);
-    setRecentActivity(combined);
-
-    setStats({
-      historyCount: hCount || 0,
-      activeRentals: aCount || 0,
-      overdueRentals: oCount || 0,
-      readyForCollection: tCount || 0,
-      availableInventory: iCount || 0,
-      dailyIncome,
-      monthlyIncome,
-      dailyExpenses,
-      monthlyExpenses,
-      netProfit,
-      rentalTotal,
-      tailoringTotal
-    });
+    const snapshot = await getDashboardSnapshot();
+    setChartData(snapshot.chartData);
+    setMonthlyChartData(snapshot.monthlyChartData);
+    setRecentActivity(snapshot.recentActivity);
+    setStats(snapshot.stats);
   };
 
   React.useEffect(() => {

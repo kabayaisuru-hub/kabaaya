@@ -7,7 +7,7 @@ import DatePicker from "react-datepicker";
 import SignatureCanvas from "react-signature-canvas";
 import "react-datepicker/dist/react-datepicker.css";
 import { format, isBefore, startOfToday } from "date-fns";
-import { 
+import {
   Search, 
   Plus, 
   X, 
@@ -30,10 +30,19 @@ import {
   Eye
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase } from "@/lib/supabase";
 import { AppleLoader } from "@/components/AppleLoader";
 import { cn, formatCurrency } from "@/lib/utils";
 import { generatePDFReceipt } from "@/lib/generatePDF";
+import {
+  deleteBooking,
+  findBookingConflict,
+  findCustomerSuggestions,
+  getBookedDatesForItemIds,
+  listBlazerInventory,
+  listBookings,
+  markBookingReturned,
+  saveBooking,
+} from "@/lib/firebase-db";
 // import { ReceiptTemplate } from "@/components/ReceiptTemplate";
 
 interface InventoryItem {
@@ -131,24 +140,17 @@ function BookingsContent() {
         }
 
         setSearchingCustomer(true);
+        const suggestions = await findCustomerSuggestions({
+          customerName: formData.customer_name,
+          customerPhone: formData.customer_phone,
+          customerNic: formData.customer_nic,
+        });
+        const perfectlyMatchesTyped = suggestions.some(
+          (customer) => customer.customer_name.toLowerCase() === formData.customer_name.toLowerCase()
+        );
 
-        const { data, error } = await supabase
-            .from("bookings")
-            .select("customer_name, customer_phone, customer_nic")
-            .or(`customer_name.ilike.%${formData.customer_name}%,customer_phone.ilike.%${formData.customer_phone}%,customer_nic.ilike.%${formData.customer_nic}%`)
-            .order("created_at", { ascending: false })
-            .limit(5);
-
-        if (!error && data) {
-            // Filter unique customers based on phone number
-            const uniqueCustomers = data.filter((v, i, a) => a.findIndex(t => (t.customer_phone === v.customer_phone)) === i);
-            
-            // Smart Filter: Only show if the name doesn't perfectly match a selected returning customer
-            const perfectlyMatchesTyped = uniqueCustomers.some(c => c.customer_name.toLowerCase() === formData.customer_name.toLowerCase());
-            
-            setCustomerSuggestions(uniqueCustomers);
-            setShowCustomerSuggestions((uniqueCustomers?.length || 0) > 0 && !perfectlyMatchesTyped);
-        }
+        setCustomerSuggestions(suggestions);
+        setShowCustomerSuggestions(suggestions.length > 0 && !perfectlyMatchesTyped);
         setSearchingCustomer(false);
     };
 
@@ -164,25 +166,8 @@ function BookingsContent() {
     if (formData.selected_items.length > 0 && isFormOpen) {
         const fetchBookedDates = async () => {
             const itemIds = formData.selected_items.map(i => i.id);
-            // Using 'ov' for array overlaps in Supabase
-            const { data, error } = await supabase
-                .from("bookings")
-                .select("pickup_date, return_date")
-                .in("status", ["Confirmed", "PickedUp"])
-                .filter('item_ids', 'ov', `{${itemIds.join(',')}}`);
-
-            if (!error && data) {
-                const dates: Date[] = [];
-                data.forEach(b => {
-                    let current = new Date(b.pickup_date);
-                    const end = new Date(b.return_date);
-                    while (current <= end) {
-                        dates.push(new Date(current));
-                        current.setDate(current.getDate() + 1);
-                    }
-                });
-                setBookedDates(dates);
-            }
+            const dates = await getBookedDatesForItemIds(itemIds);
+            setBookedDates(dates);
         };
         fetchBookedDates();
     } else {
@@ -196,23 +181,13 @@ function BookingsContent() {
 
   const fetchData = async () => {
     setLoading(true);
-
-    const { data: bData, error: bError } = await supabase
-      .from("bookings")
-      .select(`*`)
-      .order("created_at", { ascending: false });
-
-    const { data: iData, error: iError } = await supabase
-      .from("inventory")
-      .select("id, item_code, name, category, unit_selling_price")
-      .eq("category", "Blazer")
-      .order("item_code", { ascending: true });
-
-    if (bError) console.error("Error fetching bookings:", bError);
-    if (iError) console.error("Error fetching inventory:", iError);
-
-    setBookings(bData || []);
-    setInventoryItems(iData || []);
+    try {
+      const [bData, iData] = await Promise.all([listBookings(), listBlazerInventory()]);
+      setBookings(bData || []);
+      setInventoryItems(iData || []);
+    } catch (error) {
+      console.error("Error fetching bookings data:", error);
+    }
     setLoading(false);
   };
 
@@ -226,38 +201,31 @@ function BookingsContent() {
     const pickupStr = format(formData.pickup_date, "yyyy-MM-dd");
     const returnStr = format(formData.return_date, "yyyy-MM-dd");
 
-    // 1. Conflict Check for each item
-    for (const item of formData.selected_items) {
-        const query = supabase
-          .from("bookings")
-          .select(`id, customer_name, pickup_date, return_date`)
-          .filter("item_ids", "cs", `{${item.id}}`) // Contains item ID
-          .neq("status", "Cancelled")
-          .neq("status", "Returned")
-          .lte("pickup_date", returnStr)
-          .gte("return_date", pickupStr);
+    try {
+      const conflict = await findBookingConflict(
+        formData.selected_items.map((item) => item.id),
+        pickupStr,
+        returnStr,
+        editingBooking?.id
+      );
 
-        if (editingBooking) {
-            query.neq("id", editingBooking.id);
-        }
+      if (conflict) {
+        const conflictingItem = formData.selected_items.find(
+          (item) => item.id === conflict.itemId
+        );
+        const pickupFormatted = new Date(conflict.booking.pickup_date).toLocaleDateString();
+        const returnFormatted = new Date(conflict.booking.return_date).toLocaleDateString();
 
-        const { data: conflicts, error: conflictError } = await query;
-
-        if (conflictError) {
-          setConflictAlert("Error checking availability. Please try again.");
-          setSaving(false);
-          return;
-        }
-
-        if (conflicts && conflicts.length > 0) {
-          const conflict = conflicts[0];
-          const pickupFormatted = new Date(conflict.pickup_date).toLocaleDateString();
-          const returnFormatted = new Date(conflict.return_date).toLocaleDateString();
-          
-          setConflictAlert(`Conflict: ${item.item_code} is already reserved by ${conflict.customer_name} from ${pickupFormatted} to ${returnFormatted}.`);
-          setSaving(false);
-          return;
-        }
+        setConflictAlert(
+          `Conflict: ${conflictingItem?.item_code || "Selected item"} is already reserved by ${conflict.booking.customer_name} from ${pickupFormatted} to ${returnFormatted}.`
+        );
+        setSaving(false);
+        return;
+      }
+    } catch (error) {
+      setConflictAlert("Error checking availability. Please try again.");
+      setSaving(false);
+      return;
     }
 
     // 2. Capture Signature as JSON / Points
@@ -287,27 +255,9 @@ function BookingsContent() {
       signature_data: signatureData,
     };
 
-    let result;
-    if (editingBooking) {
-        result = await supabase
-            .from("bookings")
-            .update(bookingPayload)
-            .eq("id", editingBooking.id)
-            .select();
-    } else {
-        result = await supabase
-            .from("bookings")
-            .insert([bookingPayload])
-            .select();
-    }
-
-    const { data: insertedData, error: insertError } = result;
-
-    if (insertError) {
-      setConflictAlert("Error saving booking: " + insertError.message);
-    } else {
+    try {
+      const savedBooking = await saveBooking(bookingPayload, editingBooking?.id);
       // Use the database-generated invoice number
-      const savedBooking = insertedData[0];
       const invoiceNo = savedBooking.invoice_no;
       const displayInvoiceNo = `KB-${invoiceNo}`;
       
@@ -341,8 +291,10 @@ function BookingsContent() {
         await generatePDFReceipt(newBookingObj, filename);
         setLoading(false);
       }, 500);
-      // --------------------------------------
-      // --------------------------------------
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to save the booking right now.";
+      setConflictAlert("Error saving booking: " + message);
     }
     setSaving(false);
   };
@@ -350,48 +302,23 @@ function BookingsContent() {
   const handleHardDeleteBooking = async () => {
     if (!cancellingBooking) return;
     setSaving(true);
-    // Hard delete from database
-    const { error } = await supabase
-      .from("bookings")
-      .delete()
-      .eq("id", cancellingBooking.id);
-
-    if (error) {
-      alert("Error deleting booking: " + error.message);
-    } else {
+    try {
+      await deleteBooking(cancellingBooking.id);
       setCancellingBooking(null);
       fetchData();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Error deleting booking.");
     }
     setSaving(false);
   };
 
   const handleMarkReturned = async (bookingId: string) => {
     setSaving(true);
-    
-    // 1. Get the booking to find associated items
-    const { data: bookingData } = await supabase
-      .from("bookings")
-      .select("item_ids")
-      .eq("id", bookingId)
-      .single();
-
-    // 2. Update booking status
-    const { error } = await supabase
-      .from("bookings")
-      .update({ status: "Returned" })
-      .eq("id", bookingId);
-
-    if (error) {
-      alert("Error returning booking: " + error.message);
-    } else {
-      // 3. Update associated inventory items to 'Available'
-      if (bookingData && bookingData.item_ids && bookingData.item_ids.length > 0) {
-        await supabase
-          .from("inventory")
-          .update({ status: "Available" })
-          .in("id", bookingData.item_ids);
-      }
+    try {
+      await markBookingReturned(bookingId);
       fetchData();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Error returning booking.");
     }
     setSaving(false);
   };

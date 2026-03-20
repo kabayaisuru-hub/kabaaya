@@ -2,17 +2,34 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { Menu, FileText, Loader2 } from "lucide-react";
+import { Menu, FileText, Loader2, LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { generateFinancialReport } from "@/lib/generateFinancialReport";
 import { motion, Variants } from "framer-motion";
+import { signOutFromFirebase } from "@/lib/firebase-auth";
 
 export function Header() {
+  const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const handleDownloadReport = async () => {
     setIsGenerating(true);
     await generateFinancialReport();
     setIsGenerating(false);
+  };
+
+  const handleLogout = async () => {
+    setIsSigningOut(true);
+
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      await signOutFromFirebase().catch(() => undefined);
+      router.push("/login");
+      router.refresh();
+      setIsSigningOut(false);
+    }
   };
 
   const text = "Premium Wedding Wear";
@@ -83,19 +100,35 @@ export function Header() {
         </div>
       </div>
 
-      <button 
-        onClick={handleDownloadReport}
-        disabled={isGenerating}
-        className="text-white hover:text-[#D4AF37] transition-colors disabled:opacity-50 flex items-center gap-2 bg-white/5 px-3 py-2 rounded-xl border border-white/10"
-        title="Download Financial Report"
-      >
-        {isGenerating ? (
-          <Loader2 size={20} className="animate-spin text-[#D4AF37]" />
-        ) : (
-          <FileText size={20} />
-        )}
-        <span className="text-xs font-bold hidden sm:inline">Report</span>
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleLogout}
+          disabled={isSigningOut}
+          className="text-white hover:text-red-400 transition-colors disabled:opacity-50 flex items-center gap-2 bg-white/5 px-3 py-2 rounded-xl border border-white/10"
+          title="Sign Out"
+        >
+          {isSigningOut ? (
+            <Loader2 size={20} className="animate-spin text-red-400" />
+          ) : (
+            <LogOut size={20} />
+          )}
+          <span className="text-xs font-bold hidden sm:inline">Sign Out</span>
+        </button>
+
+        <button
+          onClick={handleDownloadReport}
+          disabled={isGenerating}
+          className="text-white hover:text-[#D4AF37] transition-colors disabled:opacity-50 flex items-center gap-2 bg-white/5 px-3 py-2 rounded-xl border border-white/10"
+          title="Download Financial Report"
+        >
+          {isGenerating ? (
+            <Loader2 size={20} className="animate-spin text-[#D4AF37]" />
+          ) : (
+            <FileText size={20} />
+          )}
+          <span className="text-xs font-bold hidden sm:inline">Report</span>
+        </button>
+      </div>
     </header>
   );
 }

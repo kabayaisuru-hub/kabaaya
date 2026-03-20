@@ -13,11 +13,11 @@ import {
   ChevronRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase } from "@/lib/supabase";
 import { AppleLoader } from "@/components/AppleLoader";
 import { cn, formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import Link from "next/link";
+import { deleteExpense, listExpensesByDate, saveExpense } from "@/lib/firebase-db";
 
 type ExpenseCategory = 'Vehicle' | 'Petrol' | 'Shop Rent' | 'Tea/Meals' | 'Light Bill' | 'Water Bill' | 'Other';
 
@@ -52,16 +52,11 @@ export default function ExpensesPage() {
   const fetchTodayExpenses = async () => {
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
-    const { data, error } = await supabase
-      .from("expenses")
-      .select("*")
-      .eq("expense_date", today)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching today's expenses:", error);
-    } else {
+    try {
+      const data = await listExpensesByDate(today);
       setExpenses(data || []);
+    } catch (error) {
+      console.error("Error fetching today's expenses:", error);
     }
     setLoading(false);
   };
@@ -79,26 +74,15 @@ export default function ExpensesPage() {
       expense_date: formData.expense_date
     };
 
-    let error;
-    if (editingExpenseId) {
-      const { error: err } = await supabase
-        .from("expenses")
-        .update(payload)
-        .eq("id", editingExpenseId);
-      error = err;
-    } else {
-      const { error: err } = await supabase
-        .from("expenses")
-        .insert(payload);
-      error = err;
-    }
-
-    if (error) {
-      alert("Error saving expense: " + error.message);
-    } else {
+    try {
+      await saveExpense(payload, editingExpenseId || undefined);
       setIsFormOpen(false);
       resetForm();
       fetchTodayExpenses();
+    } catch (error) {
+      alert(
+        error instanceof Error ? `Error saving expense: ${error.message}` : "Error saving expense."
+      );
     }
     setLoading(false);
   };
@@ -128,13 +112,12 @@ export default function ExpensesPage() {
     if (!confirm("Are you sure you want to delete this expense?")) return;
     
     setLoading(true);
-    const { error } = await supabase
-      .from("expenses")
-      .delete()
-      .eq("id", id);
-    
-    if (error) alert(error.message);
-    else fetchTodayExpenses();
+    try {
+      await deleteExpense(id);
+      fetchTodayExpenses();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to delete expense.");
+    }
     setLoading(false);
   };
 

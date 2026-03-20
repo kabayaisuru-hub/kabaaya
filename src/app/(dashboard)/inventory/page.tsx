@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { 
+import {
   Search, 
   Plus, 
   Pencil, 
@@ -14,10 +14,14 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase } from "@/lib/supabase";
 import { AppleLoader } from "@/components/AppleLoader";
 import { cn, formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
+import {
+  deleteInventoryItem,
+  listInventoryItemsWithBookingInfo,
+  saveInventoryItem,
+} from "@/lib/firebase-db";
 
 type Category = "Blazer" | "Fabric" | "Product";
 
@@ -79,49 +83,11 @@ function InventoryContent() {
 
   const fetchItems = async () => {
     setLoading(true);
-    
-    // 1. Fetch Inventory Items
-    const { data: itemsData, error: itemsError } = await supabase
-      .from("inventory")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    // 2. Fetch Active Bookings (Not just today, any upcoming or active)
-    const today = new Date().toISOString().split('T')[0];
-    const { data: bookingsData, error: bookingsError } = await supabase
-      .from("bookings")
-      .select("item_id, customer_name, pickup_date, return_date, status")
-      .in("status", ["Confirmed", "PickedUp"])
-      .gte("return_date", today)
-      .order("pickup_date", { ascending: true });
-
-    if (itemsError) {
-      console.error("Error fetching items:", itemsError);
-    } else {
-      // Create a map of item_id -> bookings[]
-      const activeBookingMap = new Map<string, any[]>();
-      if (bookingsData) {
-          bookingsData.forEach(b => {
-              if (!activeBookingMap.has(b.item_id)) {
-                  activeBookingMap.set(b.item_id, []);
-              }
-              activeBookingMap.get(b.item_id)!.push(b);
-          });
-      }
-
-      // Merge derived status and bookings array
-      const processedItems = itemsData?.map(item => {
-          if (item.category === "Blazer" && activeBookingMap.has(item.id)) {
-              return { 
-                  ...item, 
-                  displayStatus: "Booked",
-                  bookings: activeBookingMap.get(item.id) 
-              };
-          }
-          return { ...item, displayStatus: item.status };
-      });
-
+    try {
+      const processedItems = await listInventoryItemsWithBookingInfo();
       setItems(processedItems || []);
+    } catch (error) {
+      console.error("Error fetching items:", error);
     }
     setLoading(false);
   };
@@ -137,37 +103,20 @@ function InventoryContent() {
       current_stock_quantity: (editingItem ? editingItem.category : formData.category) === "Blazer" ? 1 : formData.current_stock_quantity
     };
 
-    let error;
-    if (editingItem) {
-        const { error: updateError } = await supabase
-            .from("inventory")
-            .update({
-                name: formData.name,
-                size: formData.size,
-                color: formData.color,
-                fabric_type: formData.fabric_type,
-                unit: formData.unit,
-                current_stock_quantity: payload.current_stock_quantity,
-                unit_cost_price: formData.unit_cost_price,
-                unit_selling_price: formData.unit_selling_price,
-                status: formData.status
-            })
-            .eq("id", editingItem.id);
-        error = updateError;
-    } else {
-        const { error: insertError } = await supabase
-            .from("inventory")
-            .insert([payload]);
-        error = insertError;
-    }
-
-    if (error) {
-      alert("Error saving item: " + error.message);
-    } else {
+    try {
+      await saveInventoryItem(
+        {
+          ...payload,
+          item_code: editingItem ? editingItem.item_code : payload.item_code,
+        },
+        editingItem?.id
+      );
       setIsFormOpen(false);
       setEditingItem(null);
       resetForm(activeTab);
       fetchItems();
+    } catch (error) {
+      alert(error instanceof Error ? `Error saving item: ${error.message}` : "Error saving item.");
     }
     setLoading(false);
   };
@@ -175,16 +124,12 @@ function InventoryContent() {
   const handleDelete = async () => {
     if (!deletingItem) return;
     setLoading(true);
-    const { error } = await supabase
-      .from("inventory")
-      .delete()
-      .eq("id", deletingItem.id);
-
-    if (error) {
-      alert("Error deleting item: " + error.message);
-    } else {
+    try {
+      await deleteInventoryItem(deletingItem.id);
       setDeletingItem(null);
       fetchItems();
+    } catch (error) {
+      alert(error instanceof Error ? `Error deleting item: ${error.message}` : "Error deleting item.");
     }
     setLoading(false);
   };

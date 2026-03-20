@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef, Suspense, useMemo } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   Plus,
@@ -31,12 +31,20 @@ import {
   Download
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase } from "@/lib/supabase";
 import { AppleLoader } from "@/components/AppleLoader";
 import { cn, formatCurrency } from "@/lib/utils";
 // import { TailoringReceiptTemplate } from "@/components/TailoringReceiptTemplate";
 import { generatePDFReceipt, generateTailoringPDF } from "@/lib/generatePDF";
 import { format, isBefore, startOfToday } from "date-fns";
+import {
+  consumeInventoryStock,
+  createTailoringOrder,
+  deleteTailoringOrder,
+  getNextTailoringCode,
+  listAvailableFabricInventory,
+  listTailoringOrders,
+  updateTailoringOrderStatus,
+} from "@/lib/firebase-db";
 
 interface Customer {
   id: string;
@@ -78,7 +86,7 @@ interface TailoringOrder {
   total_amount: number;
   advance_paid: number;
   balance_due: number;
-  status: 'Pending' | 'Completed';
+  status: 'Pending' | 'Measuring' | 'Sewing' | 'Ready' | 'Completed';
   due_date: string;
   notes?: string;
   discount_amount: number;
@@ -103,7 +111,6 @@ export default function TailoringPage() {
 }
 
 function TailoringContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const initialStatus = searchParams.get("status");
 
@@ -136,50 +143,17 @@ function TailoringContent() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data: oData, error: oError } = await supabase
-      .from('tailoring_orders')
-      .select('*, items:tailoring_items(*)')
-      .order('created_at', { ascending: false });
-
-    if (oError) console.error("Error fetching tailoring orders:", oError);
-    else setOrders(oData || []);
-
+    try {
+      const oData = await listTailoringOrders();
+      setOrders(oData || []);
+    } catch (error) {
+      console.error("Error fetching tailoring orders:", error);
+    }
     setLoading(false);
   };
 
   const fetchNextId = async () => {
-    const { data } = await supabase
-      .from('tailoring_orders')
-      .select('cr_book_page_number')
-      .not('cr_book_page_number', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    if (data && data.length > 0 && data[0].cr_book_page_number) {
-      const lastVal = data[0].cr_book_page_number;
-      // Try to parse if it's KT-XXXX format
-      const match = lastVal.match(/KT-(\d+)/);
-      if (match) {
-        const num = parseInt(match[1]);
-        return `KT-${num + 1}`;
-      }
-    }
-    // Default: find highest KT number from all records
-    const { data: allData } = await supabase
-      .from('tailoring_orders')
-      .select('cr_book_page_number')
-      .not('cr_book_page_number', 'is', null);
-
-    if (allData && allData.length > 0) {
-      const nums = allData
-        .map((r: any) => { const m = (r.cr_book_page_number || '').match(/KT-(\d+)/); return m ? parseInt(m[1]) : 0; })
-        .filter((n: number) => n > 0);
-      if (nums.length > 0) {
-        const max = Math.max(...nums);
-        return `KT-${max + 1}`;
-      }
-    }
-    return 'KT-1900';
+    return getNextTailoringCode();
   };
 
   const loadNextId = async () => {
@@ -195,13 +169,7 @@ function TailoringContent() {
   }, []);
 
   const fetchFabricInventory = async () => {
-    const { data } = await supabase
-      .from('inventory')
-      .select('id, item_code, name, category, unit_selling_price, current_stock_quantity')
-      .eq('category', 'Fabric')
-      .eq('status', 'Available')
-      .order('name');
-
+    const data = await listAvailableFabricInventory();
     if (data) setFabricInventory(data);
   };
 
@@ -214,6 +182,7 @@ function TailoringContent() {
 
     setSaving(true);
     const orderPayload = {
+      invoice_id: formData.invoice_id || formData.cr_book_page_number || nextInvoiceId,
       cr_book_page_number: formData.cr_book_page_number,
       customer_name: formData.customer_name,
       customer_address: formData.customer_address,
@@ -229,47 +198,16 @@ function TailoringContent() {
       status: 'Pending'
     };
 
-    const { data: orderData, error: orderError } = await supabase
-      .from('tailoring_orders')
-      .insert([orderPayload])
-      .select()
-      .single();
+    try {
+      await createTailoringOrder(orderPayload, formData.items);
 
-    if (orderError) {
-      alert("Error creating order: " + orderError.message);
-    } else if (orderData) {
-      // Insert Job Card Items
-      const itemsPayload = formData.items.map(item => ({
-        ...item,
-        order_id: orderData.id
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('tailoring_items')
-        .insert(itemsPayload);
-
-      if (itemsError) {
-        alert("Order created but items failed: " + itemsError.message);
-      } else {
-        // Inventory Integration: Deduct stock for items using shop fabric
-        for (const item of formData.items) {
-          if (item.inventory_item_id && item.fabric_source === 'Shop Stock' && item.quantity_used > 0) {
-            // First, get current stock
-            const { data: currentItem } = await supabase
-              .from('inventory')
-              .select('current_stock_quantity')
-              .eq('id', item.inventory_item_id)
-              .single();
-
-            if (currentItem) {
-              const qtyInMeters = toMeters(Number(item.quantity_used), (item as any).measurement_unit || 'm');
-              const newStock = Math.max(0, Number(currentItem.current_stock_quantity) - qtyInMeters);
-              await supabase
-                .from('inventory')
-                .update({ current_stock_quantity: newStock })
-                .eq('id', item.inventory_item_id);
-            }
-          }
+      for (const item of formData.items) {
+        if (item.inventory_item_id && item.fabric_source === 'Shop Stock' && item.quantity_used > 0) {
+          const qtyInMeters = toMeters(
+            Number(item.quantity_used),
+            (item as any).measurement_unit || 'm'
+          );
+          await consumeInventoryStock(item.inventory_item_id, qtyInMeters);
         }
       }
 
@@ -278,21 +216,26 @@ function TailoringContent() {
       fetchData();
       const next = await fetchNextId();
       setNextInvoiceId(next);
+    } catch (error) {
+      alert(
+        error instanceof Error ? `Error creating order: ${error.message}` : "Error creating order."
+      );
     }
     setSaving(false);
   };
 
   const handleStatusUpdate = async (orderId: string, newStatus: 'Pending' | 'Completed') => {
     setSaving(true);
-    const { error } = await supabase
-      .from('tailoring_orders')
-      .update({ status: newStatus })
-      .eq('id', orderId);
-
-    if (error) alert("Status update failed: " + error.message);
-    else {
+    try {
+      await updateTailoringOrderStatus(orderId, newStatus);
       if (selectedOrder) setSelectedOrder({ ...selectedOrder, status: newStatus });
       fetchData();
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? `Status update failed: ${error.message}`
+          : "Status update failed."
+      );
     }
     setSaving(false);
   };
@@ -300,14 +243,15 @@ function TailoringContent() {
   const handleDeleteOrder = async () => {
     if (!deletingOrder) return;
     setSaving(true);
-    
-    await supabase.from('tailoring_items').delete().eq('tailoring_order_id', deletingOrder.id);
-    const { error } = await supabase.from('tailoring_orders').delete().eq('id', deletingOrder.id);
-    
-    if (error) alert("Failed to delete order: " + error.message);
-    else {
+
+    try {
+      await deleteTailoringOrder(deletingOrder.id);
       setDeletingOrder(null);
       fetchData();
+    } catch (error) {
+      alert(
+        error instanceof Error ? `Failed to delete order: ${error.message}` : "Failed to delete order."
+      );
     }
     setSaving(false);
   };

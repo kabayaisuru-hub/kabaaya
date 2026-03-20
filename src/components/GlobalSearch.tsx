@@ -2,9 +2,9 @@
 
 import React from "react";
 import { Search, X, Calendar, Scissors, Package, Phone, Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatCurrency } from "@/lib/utils";
+import { performGlobalSearch } from "@/lib/firebase-db";
 
 interface BookingResult {
   id: string;
@@ -61,62 +61,13 @@ export function GlobalSearch() {
 
     setIsLoading(true);
     setHasSearched(true);
-    const q = `%${searchTerm}%`;
 
     try {
-      const [bookingRes, tailoringRes, inventoryRes] = await Promise.all([
-        // Bookings: search by name or phone
-        supabase
-          .from("bookings")
-          .select("id, customer_name, customer_phone, pickup_date, return_date, total_amount, status, item_ids")
-          .or(`customer_name.ilike.${q},customer_phone.ilike.${q}`)
-          .order("created_at", { ascending: false })
-          .limit(10),
+      const results = await performGlobalSearch(searchTerm);
 
-        // Tailoring Orders: search by name, phone, or invoice_id
-        supabase
-          .from("tailoring_orders")
-          .select("id, invoice_id, customer_name, customer_phone, total_amount, status, created_at, items:tailoring_items(item_description, stitching_price)")
-          .or(`customer_name.ilike.${q},customer_phone.ilike.${q},invoice_id.ilike.${q}`)
-          .order("created_at", { ascending: false })
-          .limit(10),
-
-        // Inventory: search by item_code or name
-        supabase
-          .from("inventory")
-          .select("id, item_code, name, category, size, color, status")
-          .or(`item_code.ilike.${q},name.ilike.${q}`)
-          .order("created_at", { ascending: false })
-          .limit(10),
-      ]);
-
-      setBookings((bookingRes.data as BookingResult[]) || []);
-      setTailoring((tailoringRes.data as TailoringResult[]) || []);
-      setInventory((inventoryRes.data as InventoryResult[]) || []);
-
-      // Cross-link: If searching by blazer code, also find bookings linked to that inventory item
-      if (searchTerm.toUpperCase().startsWith("B-") && inventoryRes.data && inventoryRes.data.length > 0) {
-        const inventoryIds = inventoryRes.data.map((item: InventoryResult) => item.id);
-        
-        // Find bookings that contain any of these inventory IDs
-        const { data: linkedBookings } = await supabase
-          .from("bookings")
-          .select("id, customer_name, customer_phone, pickup_date, return_date, total_amount, status, item_ids")
-          .order("created_at", { ascending: false })
-          .limit(20);
-
-        if (linkedBookings) {
-          const filtered = linkedBookings.filter((b: BookingResult) =>
-            b.item_ids?.some((itemId: string) => inventoryIds.includes(itemId))
-          );
-          // Merge without duplicates
-          setBookings(prev => {
-            const existingIds = new Set(prev.map(b => b.id));
-            const newOnes = filtered.filter((b: BookingResult) => !existingIds.has(b.id));
-            return [...prev, ...newOnes];
-          });
-        }
-      }
+      setBookings((results.bookings as BookingResult[]) || []);
+      setTailoring((results.tailoring as TailoringResult[]) || []);
+      setInventory((results.inventory as InventoryResult[]) || []);
     } catch (error) {
       console.error("Search error:", error);
     } finally {

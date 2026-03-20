@@ -1,11 +1,14 @@
 import { Header } from "@/components/Header";
 import { BottomNavigation } from "@/components/BottomNavigation";
+import { requireAdminSession } from "@/lib/firebase-session";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await requireAdminSession();
+
   return (
     <div className="flex flex-col min-h-screen bg-black text-white">
       <Header />
