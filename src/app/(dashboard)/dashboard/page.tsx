@@ -124,13 +124,19 @@ export default function Dashboard() {
       <main className="p-4 space-y-6">
         <FestiveAlert />
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col md:flex-row md:items-center justify-between gap-4"
+        >
           <div>
             <h1 className="text-3xl font-black text-white tracking-tighter">Dashboard</h1>
             <p className="text-gray-400 text-sm font-medium">Welcome back to Kabaya Hub</p>
           </div>
           <motion.button
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={async () => {
               setReportLoading(true);
               await generateFinancialReport();
@@ -146,43 +152,64 @@ export default function Dashboard() {
             )}
             <span className="text-sm font-black text-black">Generate Monthly Report</span>
           </motion.button>
-        </div>
+        </motion.div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard
-            title="Monthly Income"
-            value={formatCurrency(stats.monthlyIncome)}
-            subtitle="Total earnings this month"
-            icon={TrendingUp}
-            color="text-green-500"
-            href="/expenses"
-          />
-          <StatCard
-            title="Active Rentals"
-            value={stats.activeRentals}
-            subtitle="Blazers items currently out"
-            icon={ShoppingBag}
-            color="text-[#D4AF37]"
-            href="/bookings?status=Active"
-          />
-          <StatCard
-            title="Overdue"
-            value={stats.overdueRentals}
-            subtitle="Items past return date"
-            icon={AlertTriangle}
-            color={stats.overdueRentals > 0 ? "text-red-500" : "text-gray-500"}
-            href="/bookings?status=Active"
-          />
-          <StatCard
-            title="Ready Collection"
-            value={stats.readyForCollection}
-            subtitle="Tailoring waiting for pickup"
-            icon={Truck}
-            color="text-blue-500"
-            href="/tailoring?status=Completed"
-          />
-        </div>
+        <motion.div 
+          variants={{
+            hidden: { opacity: 0 },
+            show: {
+              opacity: 1,
+              transition: {
+                staggerChildren: 0.1
+              }
+            }
+          }}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        >
+          <motion.div variants={{ hidden: { opacity: 0, scale: 0.95 }, show: { opacity: 1, scale: 1 } }}>
+            <StatCard
+              title="Monthly Income"
+              value={formatCurrency(stats.monthlyIncome)}
+              subtitle="Total earnings this month"
+              icon={TrendingUp}
+              color="text-green-500"
+              href="/expenses"
+            />
+          </motion.div>
+          <motion.div variants={{ hidden: { opacity: 0, scale: 0.95 }, show: { opacity: 1, scale: 1 } }}>
+            <StatCard
+              title="Active Rentals"
+              value={stats.activeRentals}
+              subtitle="Blazers items currently out"
+              icon={ShoppingBag}
+              color="text-[#D4AF37]"
+              href="/bookings?status=Active"
+            />
+          </motion.div>
+          <motion.div variants={{ hidden: { opacity: 0, scale: 0.95 }, show: { opacity: 1, scale: 1 } }}>
+            <StatCard
+              title="Overdue"
+              value={stats.overdueRentals}
+              subtitle="Items past return date"
+              icon={AlertTriangle}
+              color={stats.overdueRentals > 0 ? "text-red-500" : "text-gray-500"}
+              href="/bookings?status=Active"
+            />
+          </motion.div>
+          <motion.div variants={{ hidden: { opacity: 0, scale: 0.95 }, show: { opacity: 1, scale: 1 } }}>
+            <StatCard
+              title="Ready Collection"
+              value={stats.readyForCollection}
+              subtitle="Tailoring waiting for pickup"
+              icon={Truck}
+              color="text-blue-500"
+              href="/tailoring?status=Completed"
+            />
+          </motion.div>
+        </motion.div>
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

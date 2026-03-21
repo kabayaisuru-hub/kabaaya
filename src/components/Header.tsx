@@ -47,19 +47,33 @@ export function Header() {
     visible: {
       opacity: 1,
       y: 0,
+      scale: 1,
       transition: {
         type: "spring",
-        damping: 12,
-        stiffness: 200,
+        damping: 15,
+        stiffness: 150,
       },
     },
     hidden: {
       opacity: 0,
-      y: 10,
+      y: 15,
+      scale: 0.8,
       transition: {
         type: "spring",
-        damping: 12,
-        stiffness: 200,
+        damping: 15,
+        stiffness: 150,
+      },
+    },
+  };
+
+  const logoVariants: Variants = {
+    pulse: {
+      scale: [1, 1.05, 1],
+      opacity: [0.8, 1, 0.8],
+      transition: {
+        duration: 3,
+        repeat: Infinity,
+        ease: "easeInOut",
       },
     },
   };
@@ -72,7 +86,11 @@ export function Header() {
         </button>
         
         <div className="flex flex-col">
-          <div className="relative w-20 h-10 overflow-hidden">
+          <motion.div 
+            className="relative w-20 h-10 overflow-hidden"
+            variants={logoVariants}
+            animate="pulse"
+          >
             <Image 
               src="/logo.jpg" 
               alt="Shop Logo" 
@@ -80,7 +98,7 @@ export function Header() {
               className="object-contain object-left"
               priority
             />
-          </div>
+          </motion.div>
           <motion.div 
             className="flex mt-1"
             variants={containerVariants}
